@@ -1,0 +1,44 @@
+# Branding config — inspired by multimodal.digital
+# Edit this file to customize your presentation style
+
+title_font: "Montserrat"
+body_font: "Poppins"
+
+# Colors (dark theme)
+background: "#0a0b0f"
+text_primary: "#ffffff"
+text_secondary: "#e5e7eb"
+text_muted: "#9ca3af"
+accent: "#38b6ff"
+deep_blue: "#03467b"
+medium_blue: "#025a9e"
+bright_blue: "#0371c7"
+
+# Gradients
+heading_gradient: "linear-gradient(180deg, #38b6ff 0%, #1a5f8a 100%)"
+button_gradient: "linear-gradient(135deg, #03467b 0%, #025a9e 100%)"
+button_gradient_hover: "linear-gradient(135deg, #025a9e 0%, #0371c7 100%)"
+
+# Cards
+card_bg: "rgba(10, 11, 15, 0.8)"
+card_border: "rgba(56, 182, 255, 0.2)"
+card_border_hover: "rgba(56, 182, 255, 0.4)"
+card_radius: "16px"
+card_shadow_hover: "0 8px 30px rgba(3, 70, 123, 0.2)"
+card_backdrop_blur: "12px"
+
+# Buttons
+button_border: "rgba(56, 182, 255, 0.6)"
+button_shadow: "0 4px 20px rgba(3, 70, 123, 0.3)"
+button_shadow_hover: "0 6px 30px rgba(56, 182, 255, 0.2)"
+
+# Effects
+glow_shadow: "0 0 15px rgba(56, 182, 255, 0.5)"
+text_glow: "0 0 10px rgba(56, 182, 255, 0.6)"
+
+# Logo (optional — path to image file, or null)
+logo: null
+
+# Transition between slides
+transition: "slide"
+# Options: none, fade, slide, convex, concave, zoom

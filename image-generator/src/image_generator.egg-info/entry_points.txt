@@ -1,0 +1,2 @@
+[console_scripts]
+image-gen = image_generator.cli:app

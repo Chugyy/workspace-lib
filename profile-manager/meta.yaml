@@ -1,0 +1,9 @@
+id: profile-manager
+type: tool
+description: >
+  Manage credential profiles for workspace CLI tools.
+  Create, list, import, and switch between profiles.
+requires:
+  system:
+    - python3
+  setup: "pip install -e ."

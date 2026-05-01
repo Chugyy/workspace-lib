@@ -1,0 +1,13 @@
+id: context-hub
+type: tool
+description: >
+  CLI pour publier, s'abonner et synchroniser des entites de contexte via le Context Hub API.
+  Permet le partage de contexte structure (markdown + frontmatter YAML) entre utilisateurs et agents.
+requires:
+  env:
+    - CONTEXT_HUB_URL: "URL du Context Hub (ex: https://context.multimodal-house.fr)"
+    - CONTEXT_HUB_EMAIL: "Email du compte Context Hub"
+    - CONTEXT_HUB_PASSWORD: "Mot de passe du compte Context Hub"
+  system:
+    - python3
+  setup: "./setup.sh"

@@ -1,0 +1,9 @@
+id: slideshow
+type: tool
+description: >
+  Générer des présentations HTML standalone avec Reveal.js.
+requires:
+  env: []
+  system:
+    - python3
+  setup: "./setup.sh"

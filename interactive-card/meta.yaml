@@ -1,0 +1,11 @@
+id: interactive-card
+type: tool
+description: "Creer des conversations interactives (notifications, formulaires, tickets) dans l'AI Manager"
+entry: SKILL.md
+requires:
+  env:
+    - BACKEND_URL: "URL du backend AI Manager (default: http://127.0.0.1:4810)"
+    - BACKEND_INTERNAL_KEY: "Cle API interne du backend AI Manager (default: proxy-internal-key)"
+  system:
+    - python3
+  setup: "./setup.sh"

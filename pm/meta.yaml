@@ -1,0 +1,10 @@
+id: pm
+type: tool
+description: "Process manager CLI — list, start, stop, restart, add internal processes via the AI Manager API"
+requires:
+  env:
+    - PM_API_URL: "AI Manager backend URL (default: http://127.0.0.1:4810)"
+    - PM_API_KEY: "AI Manager internal API key (default: proxy-internal-key)"
+  system:
+    - python3
+  setup: "./setup.sh"

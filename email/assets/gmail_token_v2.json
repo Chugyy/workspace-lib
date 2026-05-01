@@ -1,0 +1,11 @@
+{
+  "token": "ya29.a0AQvPyIPGw6VaosRjeBgdjucezfIQWOh5cRDYIw__O5Yw0ujIFdrW03SBtRA0Ftw3RMjOtTeteoiwi93917bBxEpOMDlfu6LnGOU-IMmExpoXQ4KeIgUPxK2o9nhbDEpaooZ7fJt6qDLGfrSKY2fUYMQjvwDRIwe2U_XrHZHApuMWRuFw_IfKA9l01YJ_bOhaEIVefEIaCgYKAYcSARMSFQHGX2MiKPWa1pIB4_uzUz7MFDbeiA0206",
+  "refresh_token": "1//03UDihGpYJRjGCgYIARAAGAMSNwF-L9IrHcmW7Y__XCbin0oJueUBoCcByDfKHh1sicPrATjDhZ3a5NPkVCLBrP7h5VtMuZvwajw",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "client_id": "218161446280-d8b1p9brl9henpm52u07domo0dptrgul.apps.googleusercontent.com",
+  "client_secret": "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",
+  "scopes": [
+    "https://mail.google.com/"
+  ],
+  "expiry": "2026-04-28T15:54:11"
+}

@@ -1,0 +1,10 @@
+id: remotion
+type: tool
+description: "Create and render videos programmatically with React (Remotion)"
+entry: SKILL.md
+requires:
+  env: []
+  system:
+    - node
+    - npm
+  setup: "./setup.sh"

@@ -1,0 +1,2 @@
+#!/bin/bash
+exec "/data/workspace/pids/dev/mp4-transcriber/venv/bin/python3" "/data/workspace/lib/mp4-transcriber/src/cli.py" "$@"

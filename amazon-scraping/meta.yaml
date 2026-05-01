@@ -1,0 +1,9 @@
+id: amazon-scraping
+type: research
+description: "Amazon Scraping — Research"
+entry: README.md
+requires:
+  env: []
+  system:
+    - python3
+  setup: "pip install patchright"

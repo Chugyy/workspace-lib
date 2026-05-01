@@ -1,0 +1,639 @@
+#!/usr/bin/env python3
+"""context-hub — CLI for publishing, subscribing and syncing context entities."""
+
+import hashlib
+import json
+import os
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+# Resolve venv
+SCRIPT_DIR = Path(__file__).parent.resolve()
+VENV_PYTHON = SCRIPT_DIR / ".venv" / "bin" / "python3"
+if VENV_PYTHON.exists() and sys.prefix == sys.base_prefix:
+    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), __file__] + sys.argv[1:])
+
+import httpx
+import typer
+import yaml
+from rich.console import Console
+from rich.table import Table
+
+app = typer.Typer(help="Context Hub CLI — publish, subscribe, sync context entities.")
+console = Console()
+
+# ---------------------------------------------------------------------------
+# Config & Auth
+# ---------------------------------------------------------------------------
+
+AUTH_FILE = SCRIPT_DIR / ".auth.json"
+
+
+def _resolve_config() -> dict:
+    """Resolve config from profile system or env vars."""
+    try:
+        sys.path.insert(0, str(SCRIPT_DIR.parent / ".profiles"))
+        from resolver import resolve
+        return resolve("context-hub")
+    except Exception:
+        pass
+
+    url = os.environ.get("CONTEXT_HUB_URL", "")
+    email = os.environ.get("CONTEXT_HUB_EMAIL", "")
+    password = os.environ.get("CONTEXT_HUB_PASSWORD", "")
+    if url:
+        return {"CONTEXT_HUB_URL": url, "CONTEXT_HUB_EMAIL": email, "CONTEXT_HUB_PASSWORD": password}
+
+    console.print("[red]No config found. Run: profile add context-hub default[/red]")
+    raise typer.Exit(1)
+
+
+def _get_base_url() -> str:
+    config = _resolve_config()
+    url = config.get("CONTEXT_HUB_URL", "http://localhost:8000")
+    return url.rstrip("/")
+
+
+def _save_auth(token: str, email: str, base_url: str):
+    AUTH_FILE.write_text(json.dumps({
+        "token": token,
+        "email": email,
+        "base_url": base_url,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    }, indent=2))
+
+
+def _load_auth() -> Optional[dict]:
+    if AUTH_FILE.exists():
+        try:
+            return json.loads(AUTH_FILE.read_text())
+        except Exception:
+            pass
+    return None
+
+
+def _get_client() -> httpx.Client:
+    """Get an authenticated HTTP client."""
+    auth = _load_auth()
+    base_url = _get_base_url()
+
+    if auth and auth.get("token"):
+        # Verify token is still valid
+        headers = {"Authorization": f"Bearer {auth['token']}"}
+        try:
+            r = httpx.get(f"{base_url}/api/users/me", headers=headers, timeout=10)
+            if r.status_code == 200:
+                return httpx.Client(
+                    base_url=base_url,
+                    headers=headers,
+                    timeout=30,
+                )
+        except Exception:
+            pass
+
+    # Token expired or missing — re-login
+    config = _resolve_config()
+    email = config.get("CONTEXT_HUB_EMAIL", "")
+    password = config.get("CONTEXT_HUB_PASSWORD", "")
+
+    if not email or not password:
+        console.print("[red]No credentials. Run: context-hub login[/red]")
+        raise typer.Exit(1)
+
+    r = httpx.post(f"{base_url}/api/auth/login", json={"email": email, "password": password}, timeout=10)
+    if r.status_code != 200:
+        console.print(f"[red]Login failed: {r.text}[/red]")
+        raise typer.Exit(1)
+
+    token = r.json()["token"]
+    _save_auth(token, email, base_url)
+    return httpx.Client(
+        base_url=base_url,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+
+
+def _find_context_store() -> Path:
+    """Find the context store directory."""
+    # Try relative to workspace
+    candidates = [
+        Path("/data/workspace/context/store"),
+        Path.cwd() / "context" / "store",
+        Path.cwd().parent / "context" / "store",
+    ]
+    for c in candidates:
+        if c.is_dir():
+            return c
+    console.print("[red]Context store not found.[/red]")
+    raise typer.Exit(1)
+
+
+def _parse_frontmatter(content: str) -> tuple[dict, str]:
+    """Parse YAML frontmatter from markdown content."""
+    if not content.startswith("---"):
+        return {}, content
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return {}, content
+    try:
+        fm = yaml.safe_load(parts[1]) or {}
+        body = parts[2].strip()
+        return fm, body
+    except yaml.YAMLError:
+        return {}, content
+
+
+def _rebuild_registry():
+    """Rebuild the context store registry."""
+    try:
+        import subprocess
+        subprocess.run(
+            ["python3", "registry.py", "build", "context"],
+            cwd="/data/workspace",
+            capture_output=True,
+            timeout=30,
+        )
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+@app.command()
+def login(
+    email: Optional[str] = typer.Option(None, help="Email (or from profile)"),
+    password: Optional[str] = typer.Option(None, help="Password (or from profile)"),
+):
+    """Authenticate with the Context Hub."""
+    base_url = _get_base_url()
+
+    if not email or not password:
+        config = _resolve_config()
+        email = email or config.get("CONTEXT_HUB_EMAIL", "")
+        password = password or config.get("CONTEXT_HUB_PASSWORD", "")
+
+    if not email:
+        email = typer.prompt("Email")
+    if not password:
+        password = typer.prompt("Password", hide_input=True)
+
+    r = httpx.post(f"{base_url}/api/auth/login", json={"email": email, "password": password}, timeout=10)
+    if r.status_code != 200:
+        console.print(f"[red]Login failed: {r.text}[/red]")
+        raise typer.Exit(1)
+
+    token = r.json()["token"]
+    _save_auth(token, email, base_url)
+    user = r.json().get("user", {})
+    console.print(f"[green]✓ Logged in as {user.get('username', email)}[/green]")
+
+
+@app.command()
+def publish(
+    file: Path = typer.Argument(..., help="Markdown file to publish"),
+    visibility: str = typer.Option("unlisted", help="'public' or 'unlisted'"),
+):
+    """Publish a local markdown entity to the Context Hub."""
+    if not file.exists():
+        console.print(f"[red]File not found: {file}[/red]")
+        raise typer.Exit(1)
+
+    raw_md = file.read_text()
+    fm, _ = _parse_frontmatter(raw_md)
+    if "id" not in fm:
+        console.print("[red]File must have a frontmatter with an 'id' field.[/red]")
+        raise typer.Exit(1)
+
+    client = _get_client()
+    entity_id = fm["id"]
+
+    # Check if entity already exists
+    r = client.get("/api/entities")
+    if r.status_code == 200:
+        existing = [e for e in r.json().get("items", []) if e["entityId"] == entity_id]
+        if existing:
+            # Update existing
+            uuid = existing[0]["id"]
+            r = client.put(f"/api/entities/{uuid}", json={"rawMarkdown": raw_md})
+            if r.status_code == 200:
+                console.print(f"[green]✓ Updated: {entity_id}[/green]")
+            else:
+                console.print(f"[red]Update failed: {r.text}[/red]")
+                raise typer.Exit(1)
+            return
+
+    # Create new
+    r = client.post("/api/entities", json={"rawMarkdown": raw_md, "visibility": visibility})
+    if r.status_code == 201:
+        entity = r.json()
+        console.print(f"[green]✓ Published: {entity_id} ({visibility})[/green]")
+        console.print(f"  UUID: {entity['id']}")
+    else:
+        console.print(f"[red]Publish failed: {r.text}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def subscribe(
+    url: str = typer.Argument(..., help="Share link URL (https://.../s/{token})"),
+):
+    """Subscribe to a remote entity via share link. Creates a local file in the context store."""
+    # Extract token from URL
+    token = url.rstrip("/").split("/s/")[-1]
+    if not token or "/" in token:
+        console.print("[red]Invalid share link URL. Expected: https://.../s/{token}[/red]")
+        raise typer.Exit(1)
+
+    base_url = _get_base_url()
+
+    # Fetch entity via share link (no auth needed)
+    r = httpx.get(f"{base_url}/s/{token}", headers={"Accept": "application/json"}, timeout=15)
+    if r.status_code != 200:
+        console.print(f"[red]Share link access failed (HTTP {r.status_code}): {r.text}[/red]")
+        raise typer.Exit(1)
+
+    data = r.json()
+    entity = data.get("entity", {})
+    permissions = data.get("permissions", "read")
+    review_mode = data.get("share_link", {}).get("review_mode")
+
+    content = entity.get("content", "")
+    raw_fm = entity.get("frontmatter", {})
+    # frontmatter may be a JSON string (from raw DB) or a dict
+    if isinstance(raw_fm, str):
+        try:
+            frontmatter = json.loads(raw_fm)
+        except Exception:
+            frontmatter = {}
+    else:
+        frontmatter = raw_fm
+    entity_id = entity.get("entityId", entity.get("entity_id", frontmatter.get("id", "unknown")))
+
+    # Determine source_mode
+    if permissions == "read_write":
+        source_mode = f"read-write:{review_mode}" if review_mode else "read-write"
+    else:
+        source_mode = "read"
+
+    # Inject source fields into frontmatter
+    frontmatter["source"] = f"{base_url}/s/{token}"
+    frontmatter["source_mode"] = source_mode
+    remote_updated_at = entity.get("updatedAt", entity.get("updated_at", ""))
+    frontmatter["source_synced_at"] = remote_updated_at or datetime.now(timezone.utc).isoformat()
+    frontmatter["source_content_hash"] = hashlib.sha256(content.strip().encode()).hexdigest()[:16]
+
+    # Build the full markdown
+    fm_yaml = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False).strip()
+    full_md = f"---\n{fm_yaml}\n---\n\n{content}\n"
+
+    # Write to context store
+    store = _find_context_store()
+    out_file = store / f"{entity_id}.md"
+
+    if out_file.exists():
+        console.print(f"[yellow]⚠ File already exists: {out_file.name}[/yellow]")
+        overwrite = typer.confirm("Overwrite?")
+        if not overwrite:
+            raise typer.Exit(0)
+
+    out_file.write_text(full_md)
+    _rebuild_registry()
+
+    console.print(f"[green]✓ Subscribed to: {entity_id}[/green]")
+    console.print(f"  File: {out_file}")
+    console.print(f"  Mode: {source_mode}")
+    console.print(f"  Permissions: {permissions}")
+
+
+@app.command()
+def sync():
+    """Synchronize all subscribed entities (those with source: in frontmatter)."""
+    store = _find_context_store()
+    base_url = _get_base_url()
+
+    # Find all entities with source:
+    subscriptions = []
+    for md_file in sorted(store.glob("*.md")):
+        content = md_file.read_text()
+        fm, body = _parse_frontmatter(content)
+        if "source" in fm:
+            subscriptions.append({
+                "file": md_file,
+                "frontmatter": fm,
+                "body": body,
+                "full_content": content,
+            })
+
+    if not subscriptions:
+        console.print("[dim]No subscribed entities found (no files with source: in frontmatter).[/dim]")
+        return
+
+    console.print(f"[bold]Syncing {len(subscriptions)} subscription(s)...[/bold]\n")
+
+    stats = {"pulled": 0, "pushed": 0, "conflicts": 0, "skipped": 0, "errors": 0}
+
+    for sub in subscriptions:
+        fm = sub["frontmatter"]
+        entity_id = fm.get("id", sub["file"].stem)
+        source_url = fm["source"]
+        source_mode = fm.get("source_mode", "read")
+        last_sync = fm.get("source_synced_at", "")
+
+        # Extract token from source URL
+        token = source_url.rstrip("/").split("/s/")[-1]
+
+        # Fetch remote
+        try:
+            r = httpx.get(
+                f"{base_url}/s/{token}",
+                headers={"Accept": "application/json"},
+                timeout=15,
+            )
+        except Exception as e:
+            console.print(f"  [red]✗ {entity_id}: network error ({e})[/red]")
+            stats["errors"] += 1
+            continue
+
+        if r.status_code == 410:
+            console.print(f"  [yellow]⚠ {entity_id}: share link expired or revoked[/yellow]")
+            stats["errors"] += 1
+            continue
+        if r.status_code != 200:
+            console.print(f"  [red]✗ {entity_id}: HTTP {r.status_code}[/red]")
+            stats["errors"] += 1
+            continue
+
+        data = r.json()
+        remote_entity = data.get("entity", {})
+        remote_content = remote_entity.get("content", "")
+        remote_updated = remote_entity.get("updatedAt", remote_entity.get("updated_at", ""))
+
+        # Compare: strip source fields from local frontmatter for comparison
+        local_body = sub["body"]
+        local_fm_clean = {k: v for k, v in fm.items()
+                          if k not in ("source", "source_mode", "source_synced_at")}
+
+        # Remote frontmatter (may be JSON string from raw DB)
+        raw_remote_fm = remote_entity.get("frontmatter", {})
+        if isinstance(raw_remote_fm, str):
+            try:
+                remote_fm = json.loads(raw_remote_fm)
+            except Exception:
+                remote_fm = {}
+        else:
+            remote_fm = raw_remote_fm
+
+        # Detect changes using content hash
+        local_changed = False
+        remote_changed = False
+
+        # Remote changed = remote updated_at > last sync time
+        if last_sync and remote_updated:
+            try:
+                sync_dt = datetime.fromisoformat(str(last_sync).replace("Z", "+00:00"))
+                remote_dt = datetime.fromisoformat(remote_updated.replace("Z", "+00:00"))
+                remote_changed = remote_dt > sync_dt
+            except Exception:
+                remote_changed = True
+
+        # Local changed = local body hash differs from stored hash at last sync
+        stored_hash = fm.get("source_content_hash", "")
+        current_local_hash = hashlib.sha256(local_body.strip().encode()).hexdigest()[:16]
+        local_changed = stored_hash != "" and current_local_hash != stored_hash
+
+        # If no stored hash (old subscribe), fall back to assuming not locally changed
+        if not stored_hash:
+            local_changed = False
+
+        if not remote_changed and not local_changed:
+            console.print(f"  [dim]— {entity_id}: up to date[/dim]")
+            stats["skipped"] += 1
+            continue
+
+        if remote_changed and not local_changed:
+            # Pull remote → local — use remote's updated_at as sync marker for precision
+            fm["source_synced_at"] = remote_updated if remote_updated else datetime.now(timezone.utc).isoformat()
+            # Merge remote frontmatter with source fields
+            merged_fm = {**remote_fm}
+            merged_fm["source"] = fm["source"]
+            merged_fm["source_mode"] = fm["source_mode"]
+            merged_fm["source_synced_at"] = fm["source_synced_at"]
+            merged_fm["source_content_hash"] = hashlib.sha256(remote_content.strip().encode()).hexdigest()[:16]
+
+            fm_yaml = yaml.dump(merged_fm, default_flow_style=False, allow_unicode=True, sort_keys=False).strip()
+            new_content = f"---\n{fm_yaml}\n---\n\n{remote_content}\n"
+            sub["file"].write_text(new_content)
+            console.print(f"  [green]↓ {entity_id}: pulled remote changes[/green]")
+            stats["pulled"] += 1
+
+        elif local_changed and not remote_changed:
+            # Push local → remote (if read-write)
+            if "read-write" not in source_mode:
+                console.print(f"  [yellow]⚠ {entity_id}: local changes but read-only subscription[/yellow]")
+                stats["skipped"] += 1
+                continue
+
+            if "manual" in source_mode:
+                # Submit as proposal
+                r = httpx.post(
+                    f"{base_url}/s/{token}/proposals",
+                    json={
+                        "proposed_raw_markdown": local_body,
+                        "message": f"Sync from local context store ({datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')})",
+                    },
+                    timeout=15,
+                )
+                if r.status_code == 201:
+                    console.print(f"  [blue]↑ {entity_id}: proposal submitted[/blue]")
+                    stats["pushed"] += 1
+                else:
+                    console.print(f"  [red]✗ {entity_id}: proposal failed ({r.status_code})[/red]")
+                    stats["errors"] += 1
+            else:
+                # Direct modification (auto_accept)
+                r = httpx.put(
+                    f"{base_url}/s/{token}",
+                    json={"content": local_body},
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    # Use remote's updated_at from response for precise sync marker
+                    resp_data = r.json()
+                    resp_entity = resp_data.get("entity", {})
+                    resp_updated = resp_entity.get("updatedAt", resp_entity.get("updated_at", ""))
+                    fm["source_synced_at"] = resp_updated or datetime.now(timezone.utc).isoformat()
+                    fm["source_content_hash"] = hashlib.sha256(local_body.strip().encode()).hexdigest()[:16]
+                    fm_yaml = yaml.dump(fm, default_flow_style=False, allow_unicode=True, sort_keys=False).strip()
+                    new_content = f"---\n{fm_yaml}\n---\n\n{local_body}\n"
+                    sub["file"].write_text(new_content)
+                    console.print(f"  [green]↑ {entity_id}: pushed local changes[/green]")
+                    stats["pushed"] += 1
+                else:
+                    console.print(f"  [red]✗ {entity_id}: push failed ({r.status_code})[/red]")
+                    stats["errors"] += 1
+
+        else:
+            # Both changed — conflict
+            console.print(f"  [red]✗ {entity_id}: CONFLICT (both local and remote changed)[/red]")
+            console.print(f"    Local file: {sub['file']}")
+            console.print(f"    Remote updated: {remote_updated}")
+            console.print(f"    Last sync: {last_sync}")
+            console.print(f"    → Resolve manually, then re-run sync.")
+            stats["conflicts"] += 1
+
+    # Rebuild registry if anything changed
+    if stats["pulled"] > 0:
+        _rebuild_registry()
+
+    # Summary
+    console.print()
+    console.print(f"[bold]Sync complete:[/bold] "
+                  f"{stats['pulled']} pulled, "
+                  f"{stats['pushed']} pushed, "
+                  f"{stats['conflicts']} conflicts, "
+                  f"{stats['skipped']} up-to-date, "
+                  f"{stats['errors']} errors")
+
+
+@app.command()
+def status():
+    """Show sync status of all subscribed entities."""
+    store = _find_context_store()
+
+    table = Table(title="Subscribed Entities")
+    table.add_column("Entity ID", style="bold")
+    table.add_column("Mode")
+    table.add_column("Last Sync")
+    table.add_column("File")
+
+    found = False
+    for md_file in sorted(store.glob("*.md")):
+        content = md_file.read_text()
+        fm, _ = _parse_frontmatter(content)
+        if "source" in fm:
+            found = True
+            table.add_row(
+                fm.get("id", md_file.stem),
+                fm.get("source_mode", "?"),
+                fm.get("source_synced_at", "never"),
+                md_file.name,
+            )
+
+    if not found:
+        console.print("[dim]No subscribed entities found.[/dim]")
+        return
+
+    console.print(table)
+
+
+@app.command(name="list")
+def list_remote():
+    """List all entities published on the hub by the current user."""
+    client = _get_client()
+    r = client.get("/api/entities")
+    if r.status_code != 200:
+        console.print(f"[red]Failed: {r.text}[/red]")
+        raise typer.Exit(1)
+
+    items = r.json().get("items", [])
+    if not items:
+        console.print("[dim]No entities published yet.[/dim]")
+        return
+
+    table = Table(title="My Published Entities")
+    table.add_column("Entity ID", style="bold")
+    table.add_column("Visibility")
+    table.add_column("Status")
+    table.add_column("Updated")
+    table.add_column("UUID", style="dim")
+
+    for e in items:
+        table.add_row(
+            e.get("entityId", "?"),
+            e.get("visibility", "?"),
+            e.get("status", "?"),
+            (e.get("updatedAt", ""))[:19],
+            e.get("id", "")[:8] + "...",
+        )
+
+    console.print(table)
+
+
+@app.command()
+def share(
+    entity_id: str = typer.Argument(..., help="Entity ID to share (e.g., 'identity')"),
+    permissions: str = typer.Option("read", help="'read' or 'read_write'"),
+    review_mode: Optional[str] = typer.Option(None, help="'manual' or 'auto_accept' (required for read_write)"),
+    expiration_days: Optional[int] = typer.Option(None, help="Days until expiration"),
+):
+    """Generate a share link for a published entity."""
+    if permissions == "read_write" and not review_mode:
+        review_mode = "manual"
+
+    client = _get_client()
+
+    # Find entity UUID by entity_id
+    r = client.get("/api/entities")
+    if r.status_code != 200:
+        console.print(f"[red]Failed to list entities: {r.text}[/red]")
+        raise typer.Exit(1)
+
+    entities = [e for e in r.json().get("items", []) if e["entityId"] == entity_id]
+    if not entities:
+        console.print(f"[red]Entity '{entity_id}' not found. Publish it first.[/red]")
+        raise typer.Exit(1)
+
+    uuid = entities[0]["id"]
+    payload = {"permissions": permissions}
+    if review_mode:
+        payload["reviewMode"] = review_mode
+    if expiration_days:
+        payload["expirationDays"] = expiration_days
+
+    r = client.post(f"/api/entities/{uuid}/links", json=payload)
+    if r.status_code != 201:
+        console.print(f"[red]Failed: {r.text}[/red]")
+        raise typer.Exit(1)
+
+    link = r.json()
+    base_url = _get_base_url()
+    share_url = f"{base_url}/s/{link['token']}"
+
+    console.print(f"[green]✓ Share link created[/green]")
+    console.print(f"  URL: {share_url}")
+    console.print(f"  Permissions: {permissions}")
+    if review_mode:
+        console.print(f"  Review mode: {review_mode}")
+    console.print(f"\n  Share this URL with the subscriber.")
+
+
+@app.command()
+def unpublish(
+    entity_id: str = typer.Argument(..., help="Entity ID to unpublish"),
+):
+    """Unpublish an entity from the hub."""
+    client = _get_client()
+
+    r = client.get("/api/entities")
+    entities = [e for e in r.json().get("items", []) if e["entityId"] == entity_id]
+    if not entities:
+        console.print(f"[red]Entity '{entity_id}' not found.[/red]")
+        raise typer.Exit(1)
+
+    uuid = entities[0]["id"]
+    r = client.delete(f"/api/entities/{uuid}")
+    if r.status_code == 204:
+        console.print(f"[green]✓ Unpublished: {entity_id}[/green]")
+    else:
+        console.print(f"[red]Failed: {r.text}[/red]")
+        raise typer.Exit(1)
+
+
+if __name__ == "__main__":
+    app()

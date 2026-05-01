@@ -1,0 +1,12 @@
+id: whatsapp
+type: tool
+description: >
+  Envoyer et recevoir des messages WhatsApp via Unipile API.
+requires:
+  env:
+    - UNIPILE_DSN: "URL du serveur Unipile (ex: https://api15.unipile.com:14510)"
+    - UNIPILE_API_KEY: "https://app.unipile.com/ — Settings > API Keys"
+    - UNIPILE_ACCOUNT_ID: "ID du compte WhatsApp connecte dans Unipile"
+  system:
+    - python3
+  setup: "./setup.sh"

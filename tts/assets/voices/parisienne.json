@@ -1,0 +1,8 @@
+{
+  "name": "parisienne",
+  "audio": "parisienne.wav",
+  "ref_text": "Bonjour, bienvenue dans cette demonstration vocale. Je peux parler naturellement avec differents tons et emotions. Que pensez-vous de ma voix?",
+  "language": "French",
+  "description": "Voix feminine francaise, accent parisien chaleureux et naturel. Generee via Qwen3-TTS VoiceDesign, clonee avec Qwen3-TTS Base.",
+  "model": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit"
+}

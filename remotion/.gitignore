@@ -1,0 +1,8 @@
+.env
+node_modules/
+output/*.mp4
+output/*.webm
+output/*.png
+output/*.gif
+!output/.gitkeep
+tmp/

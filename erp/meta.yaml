@@ -1,0 +1,12 @@
+id: erp
+type: tool
+description: >
+  Gerer les leads, notes et contacts via Personal Dashboard API.
+requires:
+  env:
+    - ERP_API_URL: "URL de l'API Personal Dashboard (ex: https://dashboard-api.multimodal-house.fr)"
+    - ERP_EMAIL: "Email du compte admin"
+    - ERP_PASSWORD: "Mot de passe du compte admin"
+  system:
+    - python3
+  setup: "./setup.sh"

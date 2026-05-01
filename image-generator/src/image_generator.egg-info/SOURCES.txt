@@ -1,0 +1,11 @@
+pyproject.toml
+src/image_generator/__init__.py
+src/image_generator/cli.py
+src/image_generator/client.py
+src/image_generator/openai_client.py
+src/image_generator.egg-info/PKG-INFO
+src/image_generator.egg-info/SOURCES.txt
+src/image_generator.egg-info/dependency_links.txt
+src/image_generator.egg-info/entry_points.txt
+src/image_generator.egg-info/requires.txt
+src/image_generator.egg-info/top_level.txt

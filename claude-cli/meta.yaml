@@ -1,0 +1,10 @@
+id: claude-cli
+type: tool
+description: "Appeler Claude (Haiku/Sonnet/Opus) depuis des scripts shell via l'API Anthropic"
+entry: SKILL.md
+requires:
+  env:
+    - ANTHROPIC_API_KEY: "https://console.anthropic.com → API Keys"
+  system:
+    - python3
+  setup: "pip install -e ."

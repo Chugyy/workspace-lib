@@ -1,0 +1,11 @@
+id: meta-instagram
+type: research
+description: "Meta / Instagram — Research"
+entry: README.md
+requires:
+  env:
+    - INSTAGRAM_APP_ID: "Instagram App ID (PAS Facebook App ID) — developers.facebook.com > App > Instagram > Business login settings"
+    - INSTAGRAM_APP_SECRET: "Instagram App Secret (PAS Facebook App Secret) — meme page que l'App ID"
+    - INSTAGRAM_REDIRECT_URI: "HTTPS obligatoire (ngrok en dev)"
+  system:
+    - python3

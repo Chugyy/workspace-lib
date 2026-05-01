@@ -1,0 +1,9 @@
+id: agent-invoke
+type: tool
+description: "Invoquer des agents partages et converser avec eux via sessions persistantes"
+entry: SKILL.md
+requires:
+  env: []
+  system:
+    - python3
+  setup: "pip install -e ."

@@ -1,0 +1,21 @@
+{
+  "gmail": {
+    "email": "your-email@gmail.com",
+    "credentials": "assets/credentials.json"
+  },
+  "imap_smtp": {
+    "email": "your-email@provider.com",
+    "imap_host": "imap.provider.com",
+    "imap_port": 993,
+    "smtp_host": "smtp.provider.com",
+    "smtp_port": 587,
+    "password": "YOUR_PASSWORD"
+  },
+  "user": {
+    "name": "Your Name",
+    "email": "your-email@gmail.com",
+    "phone": "+33600000000",
+    "title": "Your title",
+    "signature": "Cordialement,\nYour Name"
+  }
+}

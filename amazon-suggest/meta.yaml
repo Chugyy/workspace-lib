@@ -1,0 +1,9 @@
+id: amazon-suggest
+type: research
+description: "Amazon Suggest API — Research"
+entry: README.md
+requires:
+  env: []
+  system:
+    - python3
+  setup: "pip install httpx"

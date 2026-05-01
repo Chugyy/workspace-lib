@@ -1,0 +1,6 @@
+# Profile data (credentials) — NEVER commit
+*/
+
+# Keep resolver.py committed
+!resolver.py
+!.gitignore

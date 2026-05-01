@@ -1,0 +1,10 @@
+id: anthropic
+type: research
+description: "Anthropic (Claude API) — Research"
+entry: README.md
+requires:
+  env:
+    - ANTHROPIC_API_KEY: "https://console.anthropic.com → API Keys"
+  system:
+    - python3
+  setup: "pip install anthropic"

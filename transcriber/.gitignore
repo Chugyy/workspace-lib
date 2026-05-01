@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+*.egg-info/
+tmp/
+assets/config.json
+downloads/*
+!downloads/.gitkeep

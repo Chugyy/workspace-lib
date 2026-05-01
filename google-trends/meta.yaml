@@ -1,0 +1,8 @@
+id: google-trends
+type: research
+description: >
+  Documentation d'integration Google Trends — pytrends-modern, rate limits, scoring.
+requires:
+  system:
+    - python3
+  setup: "pip install pytrends-modern"

@@ -1,0 +1,5 @@
+{
+  "api_key": "YOUR_FATHOM_API_KEY",
+  "webhook_secret": "YOUR_WEBHOOK_SECRET",
+  "base_url": "https://api.fathom.ai/external/v1"
+}

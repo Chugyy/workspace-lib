@@ -1,0 +1,8 @@
+id: doc-push
+type: tool
+description: >
+  Git add + doc-sync agent + git commit + git push. Met a jour la documentation automatiquement si les changements impactent le code.
+requires:
+  system:
+    - bash
+    - git

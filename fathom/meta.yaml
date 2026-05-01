@@ -1,0 +1,11 @@
+id: fathom
+type: tool
+description: >
+  Recuperer les transcripts d'appels Fathom via l'API.
+requires:
+  env:
+    - FATHOM_API_KEY: "Fathom → Settings → API → Generate API Key"
+    - FATHOM_WEBHOOK_SECRET: "Fathom → Settings → Webhooks → Secret"
+  system:
+    - python3
+  setup: "./setup.sh"

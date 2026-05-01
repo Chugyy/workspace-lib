@@ -1,0 +1,11 @@
+id: mp4-transcriber
+type: tool
+description: "CLI pour soumettre des fichiers vidéo/audio (MP4, MP3, WAV, M4A, AAC, OGG, FLAC...) au service de transcription/derush local (http://localhost:8765)"
+entry: SKILL.md
+requires:
+  env:
+    - MP4_TRANSCRIBER_URL: "URL du service de transcription (default: http://localhost:8765)"
+    - MP4_TRANSCRIBER_AUTHORIZATION: "Header auth pour telechargements personal cloud (optionnel, ex: Bearer sk_live_...)"
+  system:
+    - python3
+  setup: "./setup.sh"

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pm-cli"
+version = "0.1.0"
+description = "Process Manager CLI for AI Manager"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+pm = "pm_cli.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pm_cli*"]

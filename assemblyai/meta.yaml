@@ -1,0 +1,10 @@
+id: assemblyai
+type: research
+description: "AssemblyAI — Research"
+entry: README.md
+requires:
+  env:
+    - ASSEMBLYAI_API_KEY: "https://www.assemblyai.com/app/account → API Key"
+  system:
+    - python3
+  setup: "pip install assemblyai"

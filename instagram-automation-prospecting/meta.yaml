@@ -1,0 +1,13 @@
+id: instagram-automation-prospecting
+type: research
+description: "Instagram Automation & Prospecting — Research"
+entry: README.md
+requires:
+  env:
+    - INSTAGRAM_USERNAME: "Username du compte Instagram source"
+    - INSTAGRAM_PASSWORD: "Password du compte Instagram (stocke chiffre)"
+    - PROXY_URL: "Proxy residentiel dedie (http://user:pass@host:port)"
+    - HIKERAPI_KEY: "Cle API HikerAPI (si Scenario B — production)"
+    - UNIPILE_API_KEY: "Cle Unipile (si lecture inbox managed)"
+  system:
+    - python3

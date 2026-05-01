@@ -1,0 +1,10 @@
+id: youtube
+type: tool
+description: >
+  YouTube tool: download, transcript, search, upload video & thumbnail.
+requires:
+  env:
+    - GOOGLE_CLIENT_SECRET: "Google Cloud Console — APIs > Credentials > OAuth 2.0 Client ID (download JSON)"
+  system:
+    - python3
+  setup: "./setup.sh"

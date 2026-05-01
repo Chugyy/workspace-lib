@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youtube-tool"
+version = "1.0.0"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.9.0",
+    "yt-dlp>=2024.0.0",
+    "youtube-transcript-api>=0.6.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth-oauthlib>=1.1.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+yt-tool = "youtube_tool.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,8 @@
+
+# Credential profiles (secrets)
+.profiles/*/
+!.profiles/resolver.py
+registry.json
+__pycache__/
+*.pyc
+node_modules/

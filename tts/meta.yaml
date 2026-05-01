@@ -1,0 +1,9 @@
+id: tts
+type: tool
+description: >
+  Text-to-speech local via MLX Audio avec streaming progressif.
+requires:
+  env: []
+  system:
+    - python3
+  setup: "./setup.sh"

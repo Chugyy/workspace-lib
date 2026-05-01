@@ -1,0 +1,9 @@
+id: skill-creator
+type: tool
+description: "Creer et packager des skills. Guide pour la conception de profiles et outils"
+entry: SKILL.md
+requires:
+  env: []
+  system:
+    - python3
+  setup: ""

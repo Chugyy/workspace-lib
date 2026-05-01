@@ -1,0 +1,16 @@
+id: email
+type: tool
+description: >
+  Lire, envoyer et rechercher des emails via Gmail API ou IMAP/SMTP.
+requires:
+  env:
+    - GMAIL_CREDENTIALS_PATH: "Google Cloud Console → APIs & Services → Credentials → OAuth Client → Download JSON"
+    - IMAP_HOST: "Fournisseur email (ex: imap.hostinger.com)"
+    - IMAP_PORT: "Port IMAP (993)"
+    - SMTP_HOST: "Fournisseur email (ex: smtp.hostinger.com)"
+    - SMTP_PORT: "Port SMTP (587)"
+    - IMAP_EMAIL: "Adresse email du compte IMAP/SMTP"
+    - IMAP_PASSWORD: "Mot de passe du compte IMAP/SMTP"
+  system:
+    - python3
+  setup: "./setup.sh"

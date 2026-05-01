@@ -1,0 +1,10 @@
+id: slack
+type: research
+description: "Slack (Incoming Webhook) — Research"
+entry: README.md
+requires:
+  env:
+    - SLACK_WEBHOOK_URL: "Slack App → Incoming Webhooks → Add New Webhook to Workspace"
+  system:
+    - python3
+  setup: "pip install httpx"

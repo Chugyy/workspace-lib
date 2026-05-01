@@ -1,0 +1,11 @@
+id: scheduler
+type: tool
+description: "Service de scheduling persistant — cree des jobs cron ou one-shot qui postent des events au proxy AI Manager"
+requires:
+  env:
+    - AGGREGATOR_URL: "AI Manager aggregator URL (e.g. http://127.0.0.1:4811)"
+    - AGGREGATOR_API_KEY: "Aggregator API key"
+    - SCHEDULER_PORT: "Port for the scheduler service (default: 8701)"
+  system:
+    - python3
+  setup: "pip install fastapi uvicorn apscheduler"

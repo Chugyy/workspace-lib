@@ -1,0 +1,12 @@
+id: google-youtube
+type: research
+description: >
+  Documentation d'integration Google / YouTube — OAuth 2.0, Data API v3, Analytics API v2.
+requires:
+  env:
+    - YOUTUBE_CLIENT_ID: "Google Cloud Console → APIs & Services → Credentials → OAuth Client ID"
+    - YOUTUBE_CLIENT_SECRET: "Google Cloud Console → APIs & Services → Credentials → OAuth Client Secret"
+    - YOUTUBE_REDIRECT_URI: "URL callback configuree dans Google Cloud"
+    - YOUTUBE_API_KEY: "Google Cloud Console → APIs & Services → Credentials → API Key"
+  system:
+    - python3

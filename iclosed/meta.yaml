@@ -1,0 +1,9 @@
+id: iclosed
+type: research
+description: "iClosed — Research"
+entry: README.md
+requires:
+  env:
+    - ICLOSED_API_KEY: "Settings > API dans le dashboard iClosed. Format: iclosed-<token>"
+  system:
+    - python3

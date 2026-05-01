@@ -1,0 +1,11 @@
+id: telegram
+type: tool
+description: >
+  Envoyer des notifications et alertes via Telegram Bot.
+requires:
+  env:
+    - TELEGRAM_BOT_TOKEN: "BotFather sur Telegram — /newbot"
+    - TELEGRAM_CHAT_ID: "Envoyer un message au bot, puis GET https://api.telegram.org/bot<token>/getUpdates"
+  system:
+    - python3
+  setup: "./setup.sh"

@@ -1,0 +1,12 @@
+id: discord
+type: research
+description: >
+  Documentation d'integration Discord — OAuth2, bot, endpoints, rate limits.
+requires:
+  env:
+    - DISCORD_CLIENT_ID: "Discord Developer Portal → OAuth2"
+    - DISCORD_CLIENT_SECRET: "Discord Developer Portal → OAuth2"
+    - DISCORD_REDIRECT_URI: "URL callback de l'app"
+    - DISCORD_BOT_TOKEN: "Discord Developer Portal → Bot (optionnel)"
+  system:
+    - python3

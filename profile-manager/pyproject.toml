@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "profile-manager"
+version = "0.1.0"
+description = "Manage credential profiles for workspace CLI tools."
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+profile = "profile_manager.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]

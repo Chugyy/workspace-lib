@@ -1,0 +1,11 @@
+id: transcriber
+type: tool
+description: >
+  Transcrire des fichiers audio/vidéo ou URLs via OpenAI Whisper.
+requires:
+  env:
+    - OPENAI_API_KEY: "https://platform.openai.com/api-keys"
+  system:
+    - python3
+    - ffmpeg
+  setup: "./setup.sh"

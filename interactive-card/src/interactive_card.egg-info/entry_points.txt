@@ -1,0 +1,2 @@
+[console_scripts]
+interactive-card = interactive_card.cli:app

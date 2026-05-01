@@ -1,0 +1,12 @@
+id: image-generator
+type: tool
+description: "Generate images via OpenAI gpt-image-2 (default) or NanoBanana API. Text-to-image, image editing, thumbnails."
+entry: SKILL.md
+requires:
+  env:
+    - OPENAI_API_KEY: "https://platform.openai.com/api-keys — pour gpt-image-2 (provider par defaut)"
+    - NANOBANANA_API_KEY: "https://nanobanana.com — pour le provider NanoBanana (fallback)"
+    - PERSONAL_CLOUD_KEY: "Cle Personal Cloud pour --cloud-upload (optionnel)"
+  system:
+    - python3
+  setup: "./setup.sh"

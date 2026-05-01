@@ -1,0 +1,11 @@
+id: notion
+type: research
+description: "Notion API — Research"
+entry: README.md
+requires:
+  env:
+    - NOTION_TOKEN: "Notion Integrations → Internal Integration Secret (ntn_...)"
+    - NOTION_DATABASE_ID: "URL de la database Notion (32-char hex)"
+  system:
+    - python3
+  setup: "pip install notion-client"
