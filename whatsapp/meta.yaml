@@ -1,12 +1,13 @@
 id: whatsapp
 type: tool
 description: >
-  Envoyer et recevoir des messages WhatsApp via Unipile API.
+  Envoyer et recevoir des messages WhatsApp via WAHA (self-hosted).
 requires:
   env:
-    - UNIPILE_DSN: "URL du serveur Unipile (ex: https://api15.unipile.com:14510)"
-    - UNIPILE_API_KEY: "https://app.unipile.com/ — Settings > API Keys"
-    - UNIPILE_ACCOUNT_ID: "ID du compte WhatsApp connecte dans Unipile"
+    - WAHA_BASE_URL: "URL du serveur WAHA (ex: http://localhost:3000)"
+    - WAHA_API_KEY: "Cle API WAHA (WHATSAPP_API_KEY dans le container Docker)"
+    - WAHA_SESSION: "Nom de la session WAHA (default: default)"
   system:
     - python3
+    - docker
   setup: "./setup.sh"

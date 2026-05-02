@@ -1,1 +1,1 @@
-"""WhatsApp Manager - Unipile API client."""
+"""WhatsApp Manager - WAHA (WhatsApp HTTP API) client."""

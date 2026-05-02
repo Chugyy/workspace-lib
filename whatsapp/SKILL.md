@@ -1,6 +1,6 @@
 ---
 name: whatsapp-manager
-description: Send and receive WhatsApp messages via Unipile API. Use when the user needs to send messages, check conversations, read messages, or start new WhatsApp conversations. Supports text, images, videos, audio, and documents.
+description: Send and receive WhatsApp messages via WAHA (self-hosted). Use when the user needs to send messages, check conversations, read messages, or start new WhatsApp conversations. Supports text, images, videos, audio, and documents.
 ---
 
 # WhatsApp Manager
@@ -8,14 +8,14 @@ description: Send and receive WhatsApp messages via Unipile API. Use when the us
 ## Setup
 
 ```bash
-cd .claude/skills/whatsapp-manager && ./setup.sh
+cd ../../lib/whatsapp && ./setup.sh
 ```
 
 ## CLI Usage
 
 ```bash
 # Activate venv
-source .claude/skills/whatsapp-manager/.venv/bin/activate
+source ../../lib/whatsapp/.venv/bin/activate
 
 # Help
 whatsapp --help
@@ -24,17 +24,26 @@ whatsapp --help
 ## Commands
 
 ```bash
+# Check session status
+whatsapp session-status
+
+# Check if a phone number is on WhatsApp
+whatsapp check-phone --phone "+33612345678"
+
 # Send text to existing chat
-whatsapp send-text --chat-id "Q7z9wLVuWEKXJ505iLYh9w" --text "Hello!"
+whatsapp send-text --chat-id "33612345678@c.us" --text "Hello!"
 
 # Send image
-whatsapp send-image --chat-id "Q7z9wLVuWEKXJ505iLYh9w" --image "/path/img.png" --caption "Look at this"
+whatsapp send-image --chat-id "33612345678@c.us" --image "/path/img.png" --caption "Look at this"
 
 # Send video
-whatsapp send-video --chat-id "Q7z9wLVuWEKXJ505iLYh9w" --video "/path/video.mp4"
+whatsapp send-video --chat-id "33612345678@c.us" --video "/path/video.mp4"
 
 # Send audio
-whatsapp send-audio --chat-id "Q7z9wLVuWEKXJ505iLYh9w" --audio "/path/voice.ogg"
+whatsapp send-audio --chat-id "33612345678@c.us" --audio "/path/voice.ogg"
+
+# Send file/document
+whatsapp send-file --chat-id "33612345678@c.us" --file "/path/doc.pdf" --caption "Document"
 
 # Start new conversation (validates phone is on WhatsApp)
 whatsapp new-conversation --phone "+33612345678" --text "Hello!"
@@ -44,24 +53,28 @@ whatsapp new-conversation --phone "+33612345678" --text "See attachment" --files
 whatsapp get-chats
 
 # Get messages from a chat
-whatsapp get-messages --chat-id "Q7z9wLVuWEKXJ505iLYh9w" --limit 20
-
-# Download attachment
-whatsapp download-attachment --message-id "kLR2ZebfWIy3Y6WeOPzIuw" --attachment-id "3EB0C98D..." --output ./voice.ogg
+whatsapp get-messages --chat-id "33612345678@c.us" --limit 20
 
 # Download media from chat (batch)
-whatsapp download-media --chat-id "Q7z9wLVuWEKXJ505iLYh9w" --type audio --output-dir ./downloads
-whatsapp download-media --chat-id "Q7z9wLVuWEKXJ505iLYh9w" --list --type audio
-whatsapp download-media --chat-id "Q7z9wLVuWEKXJ505iLYh9w" --sender "Kilian" --time "15:51"
+whatsapp download-media --chat-id "33612345678@c.us" --type audio --output-dir ./downloads
+whatsapp download-media --chat-id "33612345678@c.us" --list --type audio
+whatsapp download-media --chat-id "33612345678@c.us" --sender "Kilian" --time "15:51"
 ```
+
+## Chat ID Format
+
+- Contact: `{phone}@c.us` (e.g., `33612345678@c.us`)
+- Group: `{groupId}@g.us`
+- Phone number without `+`, international format
 
 ## Config
 
-`assets/config.json` — Unipile DSN, API key, account_id, user info.
+Profile-based credentials via `profile add whatsapp default`.
 
 ## Notes
 
+- WAHA (self-hosted Docker container) — no external API dependency
 - Phone numbers must be E.164 format: `+33612345678`
 - `new-conversation` verifies the phone is on WhatsApp before sending
-- Max attachment size: 15 MB
-- Supported formats: JPG, PNG, GIF, WEBP, MP4, AVI, MOV, OGG, MP3, WAV, PDF, DOC, XLS
+- Formats: JPG, PNG, GIF, WEBP, MP4, AVI, MOV, OGG, MP3, WAV, PDF, DOC, XLS
+- Session status: `whatsapp session-status` to check connection
