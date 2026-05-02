@@ -128,23 +128,24 @@ class WAHAClient:
     - Webhook configuration
     """
 
-    def __init__(self, base_url: str, api_key: str, session: str = "default"):
+    def __init__(self, base_url: str, api_key: str = "", session: str = "default"):
         """
         Initialize WAHA client.
 
         Args:
             base_url: WAHA server URL (e.g., http://localhost:3000)
-            api_key: WAHA API key (WHATSAPP_API_KEY)
+            api_key: WAHA API key (empty string = no auth)
             session: Session name (default: "default")
         """
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
         self.session = session
-        self.headers = {
-            "X-Api-Key": self.api_key,
+        self.headers: Dict[str, str] = {
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        if self.api_key:
+            self.headers["X-Api-Key"] = self.api_key
 
     # ========================================================================
     # SESSION MANAGEMENT
