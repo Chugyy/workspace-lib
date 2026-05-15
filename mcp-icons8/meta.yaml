@@ -1,0 +1,9 @@
+id: mcp-icons8
+type: mcp
+description: >
+  Recherche d'icones Icons8 — acces au catalogue via MCP remote bridge.
+mcp:
+  name: icons8mcp
+  transport: stdio
+  command: npx
+  args: ["mcp-remote", "https://mcp.icons8.com/mcp/"]

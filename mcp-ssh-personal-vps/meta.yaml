@@ -1,0 +1,27 @@
+id: mcp-ssh-personal-vps
+type: mcp
+description: >
+  Acces SSH au VPS personnel — execution de commandes, upload/download de fichiers.
+mcp:
+  name: ssh-mcp-personal-vps
+  transport: stdio
+  command: npx
+  args:
+    - "-y"
+    - "@fangjunjie/ssh-mcp-server"
+    - "--host"
+    - "${VPS_HOST}"
+    - "--port"
+    - "22"
+    - "--username"
+    - "${VPS_USERNAME}"
+    - "--privateKey"
+    - "${SSH_KEY_PATH}"
+    - "--passphrase"
+    - "${SSH_PASSPHRASE}"
+requires:
+  env:
+    - VPS_HOST: "IP ou hostname du serveur"
+    - VPS_USERNAME: "Utilisateur SSH (ex: root)"
+    - SSH_KEY_PATH: "Chemin absolu vers la cle privee SSH"
+    - SSH_PASSPHRASE: "Passphrase de la cle SSH (vide si aucune)"

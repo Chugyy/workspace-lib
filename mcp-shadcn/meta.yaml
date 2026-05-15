@@ -1,0 +1,7 @@
+id: mcp-shadcn
+type: mcp
+description: >
+  Composants shadcn/ui — documentation et installation via MCP HTTP.
+mcp:
+  transport: http
+  url: "https://www.shadcn.io/api/mcp"

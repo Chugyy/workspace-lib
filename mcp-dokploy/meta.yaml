@@ -1,0 +1,15 @@
+id: mcp-dokploy
+type: mcp
+description: >
+  Gestion Dokploy — deploiements, domaines, bases de donnees, applications.
+mcp:
+  transport: stdio
+  command: npx
+  args: ["-y", "@ahdev/dokploy-mcp"]
+  env:
+    DOKPLOY_URL: "${DOKPLOY_URL}"
+    DOKPLOY_API_KEY: "${DOKPLOY_API_KEY}"
+requires:
+  env:
+    - DOKPLOY_URL: "URL de l'API Dokploy (ex: https://app.dokploy.com/api)"
+    - DOKPLOY_API_KEY: "Cle API depuis Dokploy Settings > API"

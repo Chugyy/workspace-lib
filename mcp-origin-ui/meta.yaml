@@ -1,0 +1,8 @@
+id: mcp-origin-ui
+type: mcp
+description: >
+  Composants Origin UI — recherche et details des 537 composants React.
+mcp:
+  transport: stdio
+  command: npx
+  args: ["--yes", "github:kelvinchng/origin-ui-mcp"]

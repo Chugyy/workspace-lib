@@ -1,0 +1,13 @@
+id: mcp-hostinger
+type: mcp
+description: >
+  Gestion Hostinger — domaines, DNS, VPS, hebergement, billing.
+mcp:
+  transport: stdio
+  command: npx
+  args: ["-y", "hostinger-api-mcp@latest"]
+  env:
+    API_TOKEN: "${HOSTINGER_API_KEY}"
+requires:
+  env:
+    - HOSTINGER_API_KEY: "Cle API depuis hpanel.hostinger.com > Account > API"

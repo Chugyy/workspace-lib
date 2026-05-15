@@ -1,0 +1,8 @@
+id: mcp-playwright
+type: mcp
+description: >
+  Automatisation navigateur — navigation, screenshots, interactions DOM.
+mcp:
+  transport: stdio
+  command: npx
+  args: ["--yes", "@playwright/mcp@latest"]
