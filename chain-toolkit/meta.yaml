@@ -1,0 +1,14 @@
+id: chain-toolkit
+type: tool
+description: >
+  Helpers bash pour les scripts d'action des PIDs.
+  Fournit parse_event, roadmap_trap, emit_progress, emit_business_event,
+  has_event, emit_event et verify_file.
+requires:
+  env:
+    - AGGREGATOR_URL: "URL de l'aggregator (ex: https://events.multimodal-house.fr)"
+    - AGG_API_KEY: "Cle API aggregator"
+  system:
+    - jq
+    - curl
+    - python3
