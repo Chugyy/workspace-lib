@@ -43,10 +43,16 @@ def _client():
     from whatsapp_manager.client import WAHAClient
     config = load_config()
     waha = config.get("waha", config)
+    # Support both env-style keys (WAHA_BASE_URL) and camelCase (base_url)
+    base_url = waha.get("base_url") or waha.get("WAHA_BASE_URL")
+    api_key = waha.get("api_key") or waha.get("WAHA_API_KEY")
+    session = waha.get("session") or waha.get("WAHA_SESSION") or "default"
+    if not base_url or not api_key:
+        raise RuntimeError("Missing WAHA_BASE_URL or WAHA_API_KEY in profile. Run: profile add whatsapp default")
     return WAHAClient(
-        base_url=waha["base_url"],
-        api_key=waha["api_key"],
-        session=waha.get("session", "default"),
+        base_url=base_url,
+        api_key=api_key,
+        session=session,
     )
 
 
