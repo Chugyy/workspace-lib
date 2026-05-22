@@ -47,6 +47,12 @@ sys.path.insert(0, str(SKILL_DIR.parent / ".profiles"))
 # Formats acceptés nativement par l'API OpenAI Whisper
 OPENAI_SUPPORTED_FORMATS = {".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm", ".ogg", ".flac"}
 
+# Extensions qui sont des alias d'un format supporté (même conteneur/codec)
+# Mappées vers l'extension canonique reconnue par l'API
+FORMAT_ALIASES = {
+    ".oga": ".ogg",   # OGG Audio (Opus codec) → OGG
+}
+
 # Taille max par upload (en bytes) — on garde 1 MB de marge
 MAX_UPLOAD_BYTES = 24 * 1024 * 1024  # 24 MB
 
@@ -332,10 +338,21 @@ class Transcriber:
     def _ensure_supported_format(self, path: Path) -> tuple:
         """
         Convertit en mp3 si le format n'est pas supporté par l'API.
+        Pour les alias connus (ex: .oga → .ogg), copie avec la bonne extension
+        sans passer par ffmpeg.
         Retourne (workfile, was_converted).
         """
-        if path.suffix.lower() in OPENAI_SUPPORTED_FORMATS:
+        ext = path.suffix.lower()
+
+        if ext in OPENAI_SUPPORTED_FORMATS:
             return path, False
+
+        # Alias connu → copie avec l'extension canonique (pas besoin de ffmpeg)
+        if ext in FORMAT_ALIASES:
+            canonical_ext = FORMAT_ALIASES[ext]
+            aliased_path = path.with_suffix(canonical_ext)
+            shutil.copy2(path, aliased_path)
+            return aliased_path, True
 
         print(f"Converting {path.suffix} → mp3...")
         mp3_path = path.with_suffix(".converted.mp3")

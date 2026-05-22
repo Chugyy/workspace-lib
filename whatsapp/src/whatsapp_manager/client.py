@@ -295,6 +295,29 @@ class WAHAClient:
             return {"items": messages}
         return messages
 
+    async def get_chat_messages_by_id(
+        self,
+        chat_id: str,
+        message_id: str,
+        download_media: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Get a single message by ID, optionally forcing media re-download.
+
+        Args:
+            chat_id: WAHA chat ID
+            message_id: Message ID
+            download_media: Whether to force media download from WhatsApp servers
+
+        Returns:
+            dict: Message object
+        """
+        return await self._make_request(
+            method="GET",
+            endpoint=f"/api/{self.session}/chats/{chat_id}/messages/{message_id}",
+            params={"downloadMedia": str(download_media).lower()},
+        )
+
     # ========================================================================
     # MESSAGE SENDING
     # ========================================================================
@@ -563,11 +586,34 @@ class WAHAClient:
 
         return data
 
+    def _rewrite_media_url(self, url: str) -> str:
+        """
+        Rewrite a media URL to use self.base_url's host:port.
+
+        WAHA generates media URLs with its internal address (e.g.
+        http://localhost:3000/api/files/...) which may differ from the
+        externally exposed base_url. Replace the scheme://host:port portion
+        with self.base_url so the download hits the correct endpoint.
+        """
+        if url.startswith("/"):
+            return f"{self.base_url}{url}"
+        # Only rewrite http(s) URLs that look like WAHA file endpoints
+        if url.startswith("http://") or url.startswith("https://"):
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            base_parsed = urlparse(self.base_url)
+            # Replace scheme + netloc with the configured base_url's
+            rewritten = url.replace(
+                f"{parsed.scheme}://{parsed.netloc}",
+                f"{base_parsed.scheme}://{base_parsed.netloc}",
+                1,
+            )
+            return rewritten
+        return url
+
     async def _download_file(self, url: str) -> bytes:
         """Download a file from a URL (media storage)."""
-        # If relative URL, prepend base_url
-        if url.startswith("/"):
-            url = f"{self.base_url}{url}"
+        url = self._rewrite_media_url(url)
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             headers = {"X-Api-Key": self.api_key}

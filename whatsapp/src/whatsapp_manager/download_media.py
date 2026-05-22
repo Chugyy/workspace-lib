@@ -246,10 +246,14 @@ class MediaDownloader:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         waha = config.get("waha", config)
+        # Support both WAHA_BASE_URL (profile resolver) and base_url (legacy) keys
+        base_url = waha.get("base_url") or waha.get("WAHA_BASE_URL")
+        api_key = waha.get("api_key") or waha.get("WAHA_API_KEY")
+        session = waha.get("session") or waha.get("WAHA_SESSION", "default")
         self.client = WAHAClient(
-            base_url=waha["base_url"],
-            api_key=waha["api_key"],
-            session=waha.get("session", "default"),
+            base_url=base_url,
+            api_key=api_key,
+            session=session,
         )
 
     async def list_messages_with_attachments(
@@ -394,7 +398,27 @@ class MediaDownloader:
                 continue
 
             try:
-                data = await self.client._download_file(item["media_url"])
+                try:
+                    data = await self.client._download_file(item["media_url"])
+                except NotFoundError:
+                    # Media cache expired — re-fetch message to force WAHA
+                    # to re-download from WhatsApp servers, then retry.
+                    msg = item["message"]
+                    msg_id = msg.get("id", "")
+                    refreshed = await self.client.get_chat_messages_by_id(
+                        chat_id=chat_id,
+                        message_id=msg_id,
+                        download_media=True,
+                    )
+                    new_media_url = ""
+                    if isinstance(refreshed, dict):
+                        new_media = refreshed.get("media") or {}
+                        new_media_url = new_media.get("url", "")
+                    if not new_media_url:
+                        raise NotFoundError(
+                            f"Media still unavailable after re-fetch for message {msg_id}"
+                        )
+                    data = await self.client._download_file(new_media_url)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(data)
             except NotFoundError as e:
