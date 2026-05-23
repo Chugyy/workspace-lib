@@ -2,7 +2,8 @@
 
 import json
 import os
-from typing import Optional
+from pathlib import Path
+from typing import List, Optional
 
 import typer
 
@@ -37,22 +38,79 @@ def _print_result(result: dict, session_id: str | None = None, raw_json: bool = 
 
 @app.command()
 def ask(
-    agent: str = typer.Argument(help="Agent name (e.g. context-search)"),
-    prompt: str = typer.Argument(help="Prompt to send"),
-    model: Optional[str] = typer.Option(None, help="Override model"),
+    agent_or_prompt: str = typer.Argument(help="Agent name (PID mode) or prompt (runtime mode with --cwd)"),
+    prompt: Optional[str] = typer.Argument(None, help="Prompt to send (when agent name is first arg)"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Override model (e.g. sonnet, opus, or full ID)"),
     timeout: int = typer.Option(300, help="Timeout in seconds"),
-    max_turns: int = typer.Option(0, help="Override max turns (0 = use agent default)"),
+    max_turns: int = typer.Option(0, help="Override max turns (0 = use agent default, kept for compat)"),
     output_json: bool = typer.Option(False, "--json", help="Raw JSON output"),
+    cwd: Optional[str] = typer.Option(None, "--cwd", help="Working directory (runtime mode or tool execution)"),
+    agent_dir: Optional[str] = typer.Option(None, "--agent-dir", help="Path to agent directory (skips registry lookup)"),
+    prompt_file: Optional[List[str]] = typer.Option(None, "--prompt-file", "-f", help="File(s) to use as system prompt"),
 ):
-    """One-shot query — no session persistence."""
-    agent_dir, meta = runner.resolve_agent(agent)
-    result = runner.run(
-        agent_dir=agent_dir,
-        prompt=prompt,
-        model=model or meta.get("model", "sonnet"),
-        max_turns=max_turns or meta.get("max_turns", 10),
-        timeout=timeout,
-    )
+    """One-shot query — no session persistence.
+
+    PID mode:     ask <agent> <prompt> [--model sonnet] [--cwd /path]
+    Runtime mode: ask --cwd /path <prompt> [--agent-dir /path/.agent] [--prompt-file /path/file.md]
+    Direct path:  ask --agent-dir /path <ignored> <prompt>
+    """
+    # Determine mode and extract actual agent name / prompt
+    if agent_dir:
+        # --agent-dir mode: skip registry, first positional is ignored as agent name,
+        # second positional is the prompt. If only one positional given, it is the prompt.
+        if prompt is not None:
+            actual_prompt = prompt
+        else:
+            actual_prompt = agent_or_prompt
+        agent_path = Path(agent_dir)
+        resolved_model = model or "sonnet"
+        system_paths = [str(Path(p).resolve()) for p in prompt_file] if prompt_file else None
+        result = runner.run(
+            agent_dir=agent_path,
+            prompt=actual_prompt,
+            model=resolved_model,
+            timeout=timeout,
+            cwd=cwd,
+            agent_directory=agent_dir,
+            system_prompt_paths=system_paths,
+        )
+    elif prompt is not None:
+        # Two positional args: <agent> <prompt> → PID mode (rétrocompat)
+        agent_name = agent_or_prompt
+        actual_prompt = prompt
+        agent_path, meta = runner.resolve_agent(agent_name)
+        system_paths = [str(Path(p).resolve()) for p in prompt_file] if prompt_file else None
+        result = runner.run(
+            agent_dir=agent_path,
+            prompt=actual_prompt,
+            model=model or meta.get("model", "sonnet"),
+            max_turns=max_turns or meta.get("max_turns", 10),
+            timeout=timeout,
+            cwd=cwd,
+            pid=agent_name,
+            system_prompt_paths=system_paths,
+        )
+    elif cwd:
+        # Runtime mode: --cwd given, single positional is the prompt
+        actual_prompt = agent_or_prompt
+        system_paths = [str(Path(p).resolve()) for p in prompt_file] if prompt_file else None
+        result = runner.run(
+            agent_dir=None,
+            prompt=actual_prompt,
+            model=model or "sonnet",
+            timeout=timeout,
+            cwd=cwd,
+            agent_directory=agent_dir,
+            system_prompt_paths=system_paths,
+        )
+    else:
+        typer.echo(
+            "Error: provide either '<agent> <prompt>' (PID mode) or "
+            "'--cwd <path> <prompt>' (runtime mode) or '--agent-dir <path> <prompt>'.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
     _print_result(result, raw_json=output_json)
     if result["is_error"]:
         raise typer.Exit(1)
@@ -62,26 +120,42 @@ def ask(
 def chat(
     agent: str = typer.Argument(help="Agent name"),
     prompt: str = typer.Argument(help="Prompt to send"),
-    model: Optional[str] = typer.Option(None, help="Override model"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Override model (e.g. sonnet, opus, or full ID)"),
     timeout: int = typer.Option(300, help="Timeout in seconds"),
-    max_turns: int = typer.Option(0, help="Override max turns"),
+    max_turns: int = typer.Option(0, help="Override max turns (kept for compat)"),
     output_json: bool = typer.Option(False, "--json", help="Raw JSON output"),
+    cwd: Optional[str] = typer.Option(None, "--cwd", help="Working directory for tool execution"),
+    agent_dir: Optional[str] = typer.Option(None, "--agent-dir", help="Path to agent directory (alternative to <agent> name)"),
+    prompt_file: Optional[List[str]] = typer.Option(None, "--prompt-file", "-f", help="File(s) to use as system prompt"),
 ):
     """Start a persistent conversation session."""
-    agent_dir, meta = runner.resolve_agent(agent)
+    system_paths = [str(Path(p).resolve()) for p in prompt_file] if prompt_file else None
+
+    if agent_dir:
+        agent_path = Path(agent_dir)
+        meta: dict = {}
+        resolved_model = model or "sonnet"
+    else:
+        agent_path, meta = runner.resolve_agent(agent)
+        resolved_model = model or meta.get("model", "sonnet")
+
     session = sessions.create_session(agent, caller=_caller())
     sessions.add_message(session["id"], "caller", prompt)
 
     result = runner.run(
-        agent_dir=agent_dir,
+        agent_dir=agent_path,
         prompt=prompt,
-        model=model or meta.get("model", "sonnet"),
+        model=resolved_model,
         max_turns=max_turns or meta.get("max_turns", 10),
         timeout=timeout,
+        cwd=cwd,
+        agent_directory=agent_dir,
+        pid=agent if not agent_dir else None,
+        system_prompt_paths=system_paths,
     )
 
     if result["session_id"]:
-        sessions.set_claude_session_id(session["id"], result["session_id"])
+        sessions.set_backend_conversation_id(session["id"], result["session_id"])
 
     sessions.add_message(session["id"], "agent", result["result"])
 
@@ -99,31 +173,46 @@ def resume(
     prompt: str = typer.Argument(help="Follow-up prompt"),
     model: Optional[str] = typer.Option(None, help="Override model"),
     timeout: int = typer.Option(300, help="Timeout in seconds"),
-    max_turns: int = typer.Option(0, help="Override max turns"),
+    max_turns: int = typer.Option(0, help="Override max turns (kept for compat)"),
     output_json: bool = typer.Option(False, "--json", help="Raw JSON output"),
 ):
-    """Continue an existing conversation."""
+    """Continue an existing conversation by sending a follow-up message to the backend."""
     session = sessions.load(session_id)
-    agent_dir, meta = runner.resolve_agent(session["agent"])
+    agent_name = session["agent"]
 
-    claude_sid = session.get("claude_session_id")
-    if not claude_sid:
-        typer.echo("No claude session to resume. Starting new conversation.")
+    # Resolve backend conversation ID (new field), fall back to legacy claude_session_id
+    backend_conv_id = session.get("backend_conversation_id") or session.get("claude_session_id")
+
+    if not backend_conv_id:
+        typer.echo(
+            "No backend conversation to resume. "
+            "Start a new conversation with `agent-invoke chat`.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # Resolve agent for model defaults
+    try:
+        _, meta = runner.resolve_agent(agent_name)
+        resolved_model = model or meta.get("model", "sonnet")
+    except FileNotFoundError:
+        resolved_model = model or "sonnet"
+        meta = {}
 
     sessions.add_message(session_id, "caller", prompt)
 
     result = runner.run(
-        agent_dir=agent_dir,
+        agent_dir=None,
         prompt=prompt,
-        model=model or meta.get("model", "sonnet"),
+        model=resolved_model,
         max_turns=max_turns or meta.get("max_turns", 10),
         timeout=timeout,
-        resume_session_id=claude_sid,
+        resume_session_id=backend_conv_id,
     )
 
-    # Update claude session ID if it changed
-    if result["session_id"] and result["session_id"] != claude_sid:
-        sessions.set_claude_session_id(session_id, result["session_id"])
+    # Update backend conversation ID if it changed (shouldn't, but keep defensive)
+    if result["session_id"] and result["session_id"] != backend_conv_id:
+        sessions.set_backend_conversation_id(session_id, result["session_id"])
 
     sessions.add_message(session_id, "agent", result["result"])
 

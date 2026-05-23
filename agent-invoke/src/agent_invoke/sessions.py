@@ -16,7 +16,8 @@ def create_session(agent: str, caller: str = "unknown") -> dict:
     session = {
         "id": uuid.uuid4().hex[:12],
         "agent": agent,
-        "claude_session_id": None,
+        # backend_conversation_id replaces the old claude_session_id
+        "backend_conversation_id": None,
         "caller": caller,
         "started": _now(),
         "status": "active",
@@ -37,11 +38,19 @@ def add_message(session_id: str, role: str, content: str) -> dict:
     return session
 
 
-def set_claude_session_id(session_id: str, claude_id: str) -> dict:
+def set_backend_conversation_id(session_id: str, conversation_id: str) -> dict:
+    """Store the AI Manager backend conversation ID for this session."""
     session = load(session_id)
-    session["claude_session_id"] = claude_id
+    session["backend_conversation_id"] = conversation_id
+    # Keep legacy field name populated for forward-compat with older readers
+    session["claude_session_id"] = conversation_id
     _write(session)
     return session
+
+
+# Legacy alias kept for any external callers
+def set_claude_session_id(session_id: str, claude_id: str) -> dict:
+    return set_backend_conversation_id(session_id, claude_id)
 
 
 def close_session(session_id: str) -> dict:

@@ -1,10 +1,12 @@
-"""Runner — spawns claude processes in agent directories."""
+"""Runner — invokes agents via the AI Manager backend API."""
 
-import json
-import subprocess
 from pathlib import Path
+from typing import Optional
 
 import yaml
+
+from agent_invoke import api
+
 
 def _find_workspace_root() -> Path:
     """Walk up from this file to find the directory containing lib/ and pids/."""
@@ -14,6 +16,7 @@ def _find_workspace_root() -> Path:
             return p
         p = p.parent
     raise RuntimeError("Cannot find workspace root (directory with lib/ and pids/)")
+
 
 WORKSPACE_ROOT = _find_workspace_root()
 LIB_DIR = WORKSPACE_ROOT / "lib"
@@ -73,74 +76,159 @@ def resolve_agent(name: str) -> tuple[Path, dict]:
     raise FileNotFoundError(f"Agent not found: {name} (searched pids/ and lib/)")
 
 
+def _expand_model(model: str) -> str:
+    """Expand short model names to full Anthropic model IDs."""
+    _ALIASES = {
+        "sonnet": "claude-sonnet-4-5",
+        "opus": "claude-opus-4-5",
+        "haiku": "claude-haiku-4-5",
+        "sonnet-4": "claude-sonnet-4-5",
+        "opus-4": "claude-opus-4-5",
+        # Legacy aliases
+        "claude-sonnet-4-20250514": "claude-sonnet-4-5",
+    }
+    return _ALIASES.get(model, model)
+
+
+def _collect_text(events: list[dict]) -> str:
+    """Extract concatenated assistant text from a list of SSE events."""
+    parts = []
+    for event in events:
+        if event.get("type") == "assistant":
+            for block in event.get("blocks", []):
+                if block.get("type") == "text":
+                    parts.append(block["text"])
+    return "".join(parts).strip()
+
+
 def run(
-    agent_dir: Path,
+    agent_dir: Optional[Path],
     prompt: str,
     model: str = "sonnet",
     max_turns: int = 10,
     timeout: int = 300,
-    resume_session_id: str | None = None,
+    # resume_session_id is now a backend conversation_id
+    resume_session_id: Optional[str] = None,
+    # Runtime overrides
+    cwd: Optional[str] = None,
+    agent_directory: Optional[str] = None,
+    pid: Optional[str] = None,
+    system_prompt_paths: Optional[list] = None,
 ) -> dict:
-    """Spawn claude in agent directory and return parsed result.
+    """Invoke agent via AI Manager API and return assembled result.
 
     Returns dict with keys: result, session_id, cost_usd, num_turns, is_error
     """
-    cmd = [
-        "claude",
-        "-p", prompt,
-        "--output-format", "json",
-        "--model", model,
-        "--max-turns", str(max_turns),
-    ]
-
-    if resume_session_id:
-        cmd.extend(["--resume", resume_session_id])
+    full_model = _expand_model(model)
 
     try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(agent_dir),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return {
-            "result": f"Timeout after {timeout}s",
-            "session_id": None,
-            "cost_usd": 0,
-            "num_turns": 0,
-            "is_error": True,
-        }
-
-    if proc.returncode != 0 and not proc.stdout.strip():
-        return {
-            "result": proc.stderr.strip() or f"Process exited with code {proc.returncode}",
-            "session_id": None,
-            "cost_usd": 0,
-            "num_turns": 0,
-            "is_error": True,
-        }
-
-    # Parse JSON output — handle both single object and stream
-    output_text = proc.stdout.strip()
-    try:
-        data = json.loads(output_text)
-    except json.JSONDecodeError:
-        # Stream mode: take last valid JSON line
-        lines = [l for l in output_text.splitlines() if l.strip().startswith("{")]
-        if lines:
+        # --- Resume: reuse existing backend conversation ---
+        if resume_session_id:
+            conversation_id = resume_session_id
             try:
-                data = json.loads(lines[-1])
-            except json.JSONDecodeError:
-                data = {}
+                api.send_message(conversation_id, prompt)
+            except RuntimeError as exc:
+                return {
+                    "result": str(exc),
+                    "session_id": conversation_id,
+                    "cost_usd": 0,
+                    "num_turns": 0,
+                    "is_error": True,
+                }
         else:
-            data = {}
+            # --- New conversation: resolve cwd and agent_directory ---
+            resolved_cwd = cwd
+            resolved_agent_dir = agent_directory
 
-    return {
-        "result": data.get("result", output_text),
-        "session_id": data.get("session_id"),
-        "cost_usd": data.get("cost_usd", 0),
-        "num_turns": data.get("num_turns", 0),
-        "is_error": data.get("is_error", False),
-    }
+            if resolved_cwd is None and agent_dir is not None:
+                # Default cwd = agent_dir itself
+                resolved_cwd = str(agent_dir)
+
+            if resolved_agent_dir is None and agent_dir is not None:
+                # Look for .agent/ sub-directory (PID layout)
+                agent_dot_dir = agent_dir / ".agent"
+                if agent_dot_dir.is_dir():
+                    resolved_agent_dir = str(agent_dot_dir)
+                else:
+                    resolved_agent_dir = str(agent_dir)
+
+            conv = api.create_conversation(
+                model=full_model,
+                pid=pid,
+                cwd=resolved_cwd,
+                agent_directory=resolved_agent_dir,
+                system_prompt_paths=system_prompt_paths,
+            )
+            conversation_id = conv["id"]
+
+            try:
+                api.send_message(conversation_id, prompt)
+            except RuntimeError as exc:
+                return {
+                    "result": str(exc),
+                    "session_id": conversation_id,
+                    "cost_usd": 0,
+                    "num_turns": 0,
+                    "is_error": True,
+                }
+
+        # --- Stream events and collect result ---
+        collected_events: list[dict] = []
+        is_error = False
+        error_message = ""
+        cost_usd = 0.0
+        num_turns = 0
+
+        for event in api.stream_events(conversation_id, timeout=timeout):
+            etype = event.get("type")
+
+            if etype == "assistant":
+                collected_events.append(event)
+
+            elif etype == "error":
+                is_error = True
+                error_message = event.get("message", "Unknown error")
+
+            elif etype == "usage_update":
+                # Approximate cost — rough estimation, backend tracks more precisely
+                input_tok = event.get("input_tokens", 0)
+                output_tok = event.get("output_tokens", 0)
+                # ~$3/Mtok input, ~$15/Mtok output (Sonnet 4.5 pricing approx)
+                cost_usd += (input_tok * 3 + output_tok * 15) / 1_000_000
+                num_turns += 1
+
+            elif etype in ("completed", "stopped"):
+                break
+
+            elif etype == "idle":
+                # No agent was running — conversation may already be done
+                break
+
+        result_text = _collect_text(collected_events)
+        if is_error and not result_text:
+            result_text = error_message or "Agent returned an error"
+
+        return {
+            "result": result_text,
+            "session_id": conversation_id,
+            "cost_usd": round(cost_usd, 6),
+            "num_turns": num_turns,
+            "is_error": is_error,
+        }
+
+    except ConnectionError as exc:
+        return {
+            "result": str(exc),
+            "session_id": None,
+            "cost_usd": 0,
+            "num_turns": 0,
+            "is_error": True,
+        }
+    except Exception as exc:
+        return {
+            "result": f"Unexpected error: {exc}",
+            "session_id": None,
+            "cost_usd": 0,
+            "num_turns": 0,
+            "is_error": True,
+        }
