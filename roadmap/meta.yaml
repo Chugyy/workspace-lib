@@ -1,0 +1,12 @@
+id: roadmap
+type: tool
+description: >
+  Gerer les roadmaps du AI Manager depuis la ligne de commande :
+  lister, creer, modifier, suivre les taches et dependances.
+requires:
+  env:
+    - BACKEND_URL: "URL du backend AI Manager (ex: http://127.0.0.1:4810)"
+    - INTERNAL_KEY: "Cle interne du backend (header X-Internal-Key)"
+  system:
+    - python3
+  setup: "./setup.sh"
