@@ -274,7 +274,10 @@ L'outil cherche l'agent dans cet ordre :
 
 ### Roadmaps (suivi de projet)
 
-Le CLI `roadmap` permet de gerer les roadmaps du AI Manager : creer, suivre les taches, gerer les dependances. Il utilise des **profils** pour cibler la bonne instance (stable, dev, pre-stable).
+Deux outils complementaires pour gerer les roadmaps :
+
+- **CLI `roadmap`** — operations CRUD rapides : creer, modifier, suivre les taches, gerer les dependances. Utilisable par tout agent ou en ligne de commande.
+- **Skill `/roadmap`** — processus conversationnel en 6 etapes pour concevoir une roadmap complete from scratch (intention, KPIs, etat des lieux, macro, detail, scripts + wiring). A utiliser quand on part de zero et qu'on veut un accompagnement structure.
 
 **Documentation complete** : `lib/roadmap/README.md`
 
@@ -299,27 +302,35 @@ roadmap show <id>                                 # details
 roadmap create "Nom" [--pid dev] [--desc "..."]   # creer
 roadmap update <id> --name "..." --status active   # modifier
 roadmap delete <id> [--force]                     # supprimer
+roadmap duplicate <id>                            # copie profonde (taches + deps)
 roadmap state <id>                                # etat enrichi (statuts runtime)
-roadmap graph <id>                                # graphe de dependances
+roadmap graph <id>                                # graphe de dependances topologique
 
 # Controle
-roadmap start <id>                                # demarrer
-roadmap stop <id> [--hard]                        # stopper
-roadmap pause <id>                                # pause
+roadmap start <id>                                # demarrer (lance les taches level-0)
+roadmap stop <id> [--hard]                        # stopper (--hard annule les taches en cours)
+roadmap pause <id>                                # pause (running continue, pas de nouveaux triggers)
 
 # Taches
 roadmap task list <id>                            # lister les taches
 roadmap task add <id> "Nom" [--parent <pid>] [--script path]
+roadmap task add <id> "Nom" --sub-roadmap <rid>   # delegation vers sous-roadmap
 roadmap task show <id> <task_id>                  # details + etat runtime
 roadmap task check <id> <task_id>                 # marquer termine
 roadmap task uncheck <id> <task_id>               # retirer le marquage
 roadmap task start <id> <task_id>                 # demarrer l'execution
+roadmap task cancel <id> <task_id>                # annuler une tache en cours
+roadmap task retry <id> <task_id>                 # relancer apres echec
 roadmap task reset <id> <task_id>                 # remettre en pending
 
 # Dependances
 roadmap dep list <id>                             # lister
 roadmap dep add <id> --task <tid> --on <dep_id>   # ajouter (detection de cycles)
 roadmap dep remove <id> <dep_id>                  # supprimer
+
+# Blocks (notes/annotations)
+roadmap block list <id> [--task <tid>]            # lister
+roadmap block add <id> "contenu" [--task <tid>]   # ajouter
 ```
 
 #### Options globales
@@ -327,11 +338,52 @@ roadmap dep remove <id> <dep_id>                  # supprimer
 | Option | Description |
 |--------|-------------|
 | `--profile`, `-p` | Profil a utiliser (stable, dev, etc.) |
-| `--json`, `-j` | Sortie JSON brute |
+| `--json`, `-j` | Sortie JSON brute (utile pour piping et scripting) |
 
 #### Resolution d'ID
 
 Les IDs peuvent etre des prefixes (8 premiers caracteres) ou des sous-chaines du nom (insensible a la casse). Si ambigu, le CLI affiche les correspondances.
+
+#### Sous-roadmaps (delegation hierarchique)
+
+Une tache peut deleguer vers une sous-roadmap via `--sub-roadmap`. Quand la sous-roadmap se termine, la tache parente est automatiquement marquee comme completee.
+
+```bash
+# Creer une roadmap parent + des sous-roadmaps
+roadmap create "Projet X" --pid dev
+roadmap create "Projet X - Backend"
+roadmap create "Projet X - Frontend"
+
+# Lier les sous-roadmaps comme taches du parent
+roadmap task add <parent-id> "Backend API" --sub-roadmap <backend-id>
+roadmap task add <parent-id> "Frontend UI" --sub-roadmap <frontend-id>
+
+# Ajouter des dependances entre taches (frontend apres backend)
+roadmap dep add <parent-id> --task <frontend-tid> --on <backend-tid>
+```
+
+#### Workflow typique
+
+```bash
+# 1. Creer la roadmap
+roadmap create "Mon projet" --pid dev --desc "Description"
+
+# 2. Ajouter des taches (hiérarchie via --parent)
+roadmap task add <id> "Phase 1 - Setup"
+roadmap task add <id> "Phase 2 - Build" 
+roadmap task add <id> "Sous-tache 2a" --parent <phase2-tid>
+
+# 3. Definir les dependances
+roadmap dep add <id> --task <phase2-tid> --on <phase1-tid>
+
+# 4. Suivre l'avancement
+roadmap state <id>       # vue d'ensemble avec statuts
+roadmap graph <id>       # graphe de dependances par niveaux
+
+# 5. Marquer l'avancement
+roadmap task check <id> <tid>    # fait
+roadmap task start <id> <tid>    # lancer un script
+```
 
 ---
 
