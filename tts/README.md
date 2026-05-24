@@ -1,6 +1,6 @@
 # TTS
 
-Text-to-speech local via MLX Audio avec streaming progressif. Voix française clonée prête à l'emploi (Parisienne) + support Kokoro/Qwen3.
+Text-to-speech local via Kokoro ONNX. Cross-platform (Linux x86_64 + macOS), inference CPU rapide (~0.25x RTF), preprocessing markdown intelligent, pauses naturelles entre phrases et paragraphes.
 
 ## Setup
 
@@ -8,45 +8,84 @@ Text-to-speech local via MLX Audio avec streaming progressif. Voix française cl
 cd ../../lib/tts && ./setup.sh
 ```
 
-Pas de credentials nécessaires (modèles locaux).
+Le setup installe les dependances Python et telecharge automatiquement les modeles Kokoro ONNX (~311 MB) dans `models/`. Pas de credentials necessaires.
+
+## Credentials
+
+Aucune. Les modeles sont locaux et telecharges automatiquement par `setup.sh`.
 
 ## Usage
 
 ```bash
-cd ../../lib/tts && source .venv/bin/activate
-
-# Voix française clonée par défaut (Parisienne)
-tts say "Bonjour. Voici un message en français."
+# Synthese avec pauses naturelles (defaut: francais)
+tts say "Bonjour. Voici un message en francais."
 
 # Sauver dans un fichier
-tts say "Texte à narrer." -o narration.wav
+tts say "Texte a narrer." -o narration.wav
 
-# TTS classique (Kokoro/Qwen3 sans cloning)
-tts speak "Hello world" --model kokoro --voice af_heart --lang en
+# Voix anglaise
+tts say "Hello world." -v af_heart -l en-us -o hello.wav
 
-# Streaming chunks vers fichiers
-tts stream-to-file "Texte multi-phrases." -d ./chunks/
+# Mode simple (sans controle de pauses)
+tts generate "Quick test." -o test.wav
 
-# Lister les voix / modèles
-tts voices --model kokoro
-tts models
+# Previsualiser le preprocessing (sans generer d'audio)
+tts preview "## Mon titre\n\nTexte avec **gras** et `code`."
+
+# Lister les voix disponibles
+tts voices
+
+# Lire depuis stdin
+cat article.md | tts say -o article.wav
 ```
 
-## Voix françaises clonées
+## Commandes
 
-| Voix | Description |
-|------|-------------|
-| `parisienne` | Femme, accent parisien chaleureux et naturel (défaut) |
+| Commande | Description |
+|----------|-------------|
+| `say` | Synthese avec pauses naturelles, preprocessing markdown, controle de vitesse |
+| `generate` | Synthese simple (pas de controle de pauses) |
+| `voices` | Liste les voix disponibles par langue |
+| `preview` | Affiche le texte apres preprocessing (sans generer d'audio) |
 
-## Modèles disponibles
+## Voix disponibles
 
-| Key | Modèle | Streaming | Pour |
-|-----|--------|-----------|------|
-| `kokoro` | Kokoro 82M | Phrase | EN rapide |
-| `qwen3-base-q4` | Qwen3-TTS 0.6B 4-bit | Token | Voice cloning |
-| `qwen3-design` | Qwen3-TTS 1.7B VoiceDesign 8-bit | Token | Créer une nouvelle voix |
-| `qwen3-base` | Qwen3-TTS 0.6B bf16 | Token | Voice cloning haute qualité |
+| Prefixe | Langue | Voix |
+|---------|--------|------|
+| `ff_` | Francais | `ff_siwis` (defaut) |
+| `af_` | Anglais US (F) | `af_heart`, `af_bella`, `af_nova`, `af_sky` |
+| `am_` | Anglais US (M) | `am_adam`, `am_echo`, `am_michael` |
+| `bf_` | Anglais GB (F) | `bf_alice`, `bf_emma` |
+| `bm_` | Anglais GB (M) | `bm_daniel`, `bm_george` |
 
-## Important pour le français
+## Important pour le francais
 
-Toujours écrire les vrais accents : é, è, ê, à, â, ù, û, ô, î, ï, ç. Le modèle lit phonétiquement.
+Toujours ecrire les vrais accents : e, e, e, a, a, u, u, o, i, i, c. Le modele lit phonetiquement.
+
+## Python API
+
+```python
+from tts_engine.engine import TTSEngine, PauseConfig
+
+engine = TTSEngine()
+
+# Generer en memoire
+result = engine.generate("Bonjour.", voice="ff_siwis", lang="fr-fr")
+print(f"Duree: {result.duration:.1f}s, RTF: {result.rtf:.2f}x")
+
+# Sauver dans un fichier
+path, result = engine.save("Texte.", "output.wav", voice="ff_siwis", lang="fr-fr")
+
+# Controle des pauses
+pause = PauseConfig(after_sentence=0.4, after_paragraph=0.8, speed=0.9)
+result = engine.generate("Texte.", pause=pause)
+```
+
+## Preprocessing markdown
+
+Le preprocesseur (`tts_engine.preprocessor`) transforme le markdown en texte parlable :
+- Supprime les blocs mermaid et code
+- Convertit les tableaux en phrases naturelles
+- Retire la syntaxe markdown (gras, italique, titres)
+- Supprime les emojis et URLs
+- Applique un dictionnaire de prononciation (acronymes tech, anglicismes)

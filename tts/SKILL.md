@@ -1,11 +1,11 @@
 ---
 name: tts-engine
-description: Local text-to-speech with streaming via MLX Audio (Apple Silicon). Voix française clonée prête à l'emploi (Parisienne) + support Kokoro/Qwen3 pour autres voix. Streaming progressif chunk par chunk. Use for voiceovers, narration, notifications, or any text-to-audio need.
+description: Local text-to-speech via Kokoro ONNX. Cross-platform (Linux + macOS), CPU inference rapide (~0.25x RTF). Preprocessing markdown, pauses naturelles, dictionnaire de prononciation. Use for voiceovers, narration, notifications, or any text-to-audio need.
 ---
 
 # TTS Engine
 
-Text-to-speech local avec streaming progressif via MLX Audio.
+Text-to-speech local via Kokoro ONNX avec preprocessing markdown et pauses naturelles.
 
 ## Setup
 
@@ -13,147 +13,107 @@ Text-to-speech local avec streaming progressif via MLX Audio.
 cd ../../lib/tts && ./setup.sh
 ```
 
-## Usage rapide (français)
+Le setup telecharge automatiquement les modeles Kokoro ONNX (~311 MB).
+
+## Usage rapide (francais)
 
 ```bash
-source ../../lib/tts/.venv/bin/activate
-
-# Voix française clonée par défaut (Parisienne)
-tts say "Bonjour. Voici un message en français avec une voix naturelle."
+# Synthese avec pauses naturelles
+tts say "Bonjour. Voici un message en francais avec une voix naturelle."
 
 # Sauver dans un fichier
-tts say "Texte à narrer." -o narration.wav
+tts say "Texte a narrer." -o narration.wav
+
+# Depuis un fichier markdown
+cat article.md | tts say -o article.wav
 ```
 
-## ⚠️ IMPORTANT pour le français
+## IMPORTANT pour le francais
 
-**Toujours écrire les vrais accents** : é, è, ê, à, â, ù, û, ô, î, ï, ç.
+**Toujours ecrire les vrais accents** : e, e, e, a, a, u, u, o, i, c.
 
-Le modèle lit phonétiquement. `degres` sera prononcé "degress" (sans accent), `degrés` sera correct.
+Le modele lit phonetiquement. `degres` sera prononce "degress" (sans accent), `degres` sera correct.
 
-## Contrôler l'émotion
+## Controler l'emotion
 
-Pas de paramètre d'émotion -- on contrôle via le **texte lui-même** :
+Pas de parametre d'emotion -- on controle via le **texte lui-meme** :
 
-| Effet voulu | Comment l'écrire |
+| Effet voulu | Comment l'ecrire |
 |-------------|-------------------|
-| Neutre/posé | Phrases longues, points seulement, pas de "salut" |
-| Joyeux | `!`, "Oh !", "Génial !", phrases courtes |
-| Calme/méditatif | Phrases lentes, "...", pauses |
-| Sérieux | Vocabulaire formel, structure professionnelle |
-| Triste | "...", "C'est dur", phrases hésitantes |
+| Neutre/pose | Phrases longues, points seulement, pas de "salut" |
+| Joyeux | `!`, "Oh !", "Genial !", phrases courtes |
+| Calme/meditatif | Phrases lentes, "...", pauses |
+| Serieux | Vocabulaire formel, structure professionnelle |
+| Triste | "...", "C'est dur", phrases hesitantes |
 
 ## Commandes
 
 ```bash
-# Voix française clonée (défaut: parisienne)
+# Synthese avec pauses naturelles (defaut: francais, voix ff_siwis)
 tts say "Texte ici"
-tts say "Texte" -v parisienne -o output.wav
+tts say "Texte" -v ff_siwis -o output.wav
+tts say "Hello world." -v af_heart -l en-us -o hello.wav
 
-# Cloner une nouvelle voix depuis un audio de référence (3s+)
-tts clone "Nouveau texte" \
-  --ref-audio voice_sample.wav \
-  --ref-text "Texte exact prononcé dans le sample"
+# Synthese simple (sans controle de pauses)
+tts generate "Quick output." -o speech.wav
 
-# TTS classique (Kokoro/Qwen3 sans cloning)
-tts speak "Hello world" --model kokoro --voice af_heart --lang en
-tts generate "Save this." -o speech.wav --model kokoro
+# Previsualiser le preprocessing markdown
+tts preview "## Titre\n\nTexte avec **gras**."
 
-# Streaming chunks vers fichiers (pour Remotion etc.)
-tts stream-to-file "Texte multi-phrases." -d ./chunks/
-
-# Listes
-tts voices --model kokoro
-tts models
+# Lister les voix
+tts voices
 ```
 
-## Voix françaises clonées disponibles
+## Options de la commande `say`
 
-| Voix | Description |
-|------|-------------|
-| `parisienne` | Femme, accent parisien chaleureux et naturel (défaut) |
+| Option | Defaut | Description |
+|--------|--------|-------------|
+| `--voice`, `-v` | `ff_siwis` | Voix Kokoro |
+| `--lang`, `-l` | `fr-fr` | Langue (fr-fr, en-us, en-gb) |
+| `--output`, `-o` | (none) | Fichier de sortie WAV |
+| `--speed`, `-s` | `0.95` | Vitesse (0.5-2.0) |
+| `--pause-sentence` | `0.28` | Pause apres phrase (secondes) |
+| `--pause-paragraph` | `0.55` | Pause apres paragraphe (secondes) |
+| `--raw`, `-r` | `false` | Desactiver le preprocessing markdown |
 
-Pour ajouter une nouvelle voix clonée :
-1. Mettre le WAV de référence dans `assets/voices/{nom}.wav`
-2. Créer `assets/voices/{nom}.json` avec `audio`, `ref_text`, `language`, `model`
-3. Ajouter `"{nom}": "{nom}"` dans `TTSEngine.CLONED_VOICES` (engine.py)
+## Voix disponibles
 
-## Modèles disponibles
-
-| Key | Modèle | Streaming | Pour |
-|-----|--------|-----------|------|
-| `kokoro` (défaut) | Kokoro 82M | Phrase | EN rapide |
-| `qwen3-base-q4` | Qwen3-TTS 0.6B 4-bit | Token | Voice cloning (utilisé par `say`/`clone`) |
-| `qwen3-design` | Qwen3-TTS 1.7B VoiceDesign 8-bit | Token | Créer une nouvelle voix depuis description |
-| `qwen3-base` | Qwen3-TTS 0.6B bf16 | Token | Voice cloning haute qualité |
+| Prefixe | Langue | Voix |
+|---------|--------|------|
+| `ff_` | Francais | `ff_siwis` (defaut) |
+| `af_` | Anglais US (F) | `af_heart`, `af_bella`, `af_nova`, `af_sky` |
+| `am_` | Anglais US (M) | `am_adam`, `am_echo`, `am_michael` |
+| `bf_` | Anglais GB (F) | `bf_alice`, `bf_emma` |
+| `bm_` | Anglais GB (M) | `bm_daniel`, `bm_george` |
 
 ## Python API
 
 ```python
-from tts_engine.engine import TTSEngine
-from tts_engine.player import StreamPlayer
+from tts_engine.engine import TTSEngine, PauseConfig
 
-# Voix française clonée
-engine, ref_audio, ref_text = TTSEngine.from_cloned_voice("parisienne")
-engine.save("Texte à narrer.", "output.wav", lang="fr",
-            ref_audio=ref_audio, ref_text=ref_text)
+engine = TTSEngine()
 
-# Streaming temps réel
-with StreamPlayer() as player:
-    for chunk in engine.stream("Long texte ici.", lang="fr",
-                                ref_audio=ref_audio, ref_text=ref_text):
-        player.queue(chunk.audio)
+# Generer en memoire
+result = engine.generate("Bonjour.", voice="ff_siwis", lang="fr-fr")
+print(f"Duree: {result.duration:.1f}s, RTF: {result.rtf:.2f}x")
 
-# Cloner une voix custom
-engine = TTSEngine("qwen3-base-q4")
-engine.save(
-    "Nouveau texte",
-    "out.wav",
-    lang="fr",
-    ref_audio="path/to/reference.wav",
-    ref_text="Texte exact du sample",
-)
+# Sauver dans un fichier
+path, result = engine.save("Texte.", "output.wav")
 
-# Créer une nouvelle voix avec VoiceDesign (puis la sauver pour cloning)
-from mlx_audio.tts.utils import load_model
-model = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit")
-for result in model.generate(
-    text="Bonjour, voici ma nouvelle voix.",
-    instruct="A French woman with a calm, warm voice and Parisian accent",
-    language="French",
-):
-    # Sauver result.audio pour réutiliser comme ref_audio plus tard
-    pass
+# Controle fin des pauses
+pause = PauseConfig(after_sentence=0.4, after_paragraph=0.8, speed=0.9)
+result = engine.generate("Texte long avec plusieurs phrases.", pause=pause)
 ```
 
-## Workflow : créer une nouvelle voix française stable
-
-```python
-# 1. Génère une voix avec VoiceDesign jusqu'à en trouver une qui plaît
-from mlx_audio.tts.utils import load_model
-import numpy as np
-from mlx_audio.audio_io import write
-
-vd = load_model("mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit")
-ref_text = "Bonjour, je suis votre assistant vocal."  # phrase de référence
-chunks = []
-for r in vd.generate(text=ref_text, instruct="A French male voice, warm and calm, 30s, Parisian accent", language="French"):
-    chunks.append(np.array(r.audio.tolist(), dtype=np.float32))
-    sr = r.sample_rate
-write("../../lib/tts/assets/voices/thomas.wav", np.concatenate(chunks), sr, format="wav")
-
-# 2. Crée le JSON metadata, ajoute dans CLOWNED_VOICES, et c'est utilisable via tts say -v thomas
-```
-
-## Intégration avec autres outils
+## Integration avec autres outils
 
 ```bash
-# Voix-off pour vidéo Remotion (chunks séparés par phrase)
-tts say "Texte de la scène." -o video/audio/scene.wav
+# Voix-off pour video
+tts say "Texte de la scene." -o video/audio/scene.wav
 
-# Article → audio
-cat article.txt | tts say -o article.wav
+# Article markdown vers audio
+cat article.md | tts say -o article.wav
 
 # Notification vocale
-tts say "Le déploiement est terminé."
+tts say "Le deploiement est termine."
 ```

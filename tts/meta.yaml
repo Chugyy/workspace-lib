@@ -1,9 +1,11 @@
 id: tts
 type: tool
 description: >
-  Text-to-speech local via MLX Audio avec streaming progressif.
+  Text-to-speech local via Kokoro ONNX. Cross-platform (Linux + macOS),
+  inference CPU rapide (~0.25x RTF), preprocessing markdown, pauses naturelles.
 requires:
   env: []
   system:
     - python3
+    - wget
   setup: "./setup.sh"
