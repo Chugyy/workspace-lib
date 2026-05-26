@@ -70,10 +70,17 @@ class RoadmapClient:
 
     # ── Roadmap CRUD ──────────────────────────────────────────────
 
-    def list_roadmaps(self, pid: Optional[str] = None) -> list:
+    def list_roadmaps(self, pid: Optional[str] = None, tag: Optional[str] = None,
+                      status: Optional[str] = None, mode: Optional[str] = None) -> list:
         params = {}
         if pid:
             params["pid"] = pid
+        if tag:
+            params["tag"] = tag
+        if status:
+            params["status"] = status
+        if mode:
+            params["mode"] = mode
         return self._request("GET", "/", params=params)
 
     def get_roadmap(self, roadmap_id: str) -> dict:
@@ -84,18 +91,24 @@ class RoadmapClient:
         name: str,
         pid: Optional[str] = None,
         description: Optional[str] = None,
-        path: Optional[str] = None,
+        mode: str = "autonomous",
+        concurrency: str = "parallel",
+        tags: Optional[list[str]] = None,
+        inputs_schema: Optional[dict] = None,
     ) -> dict:
-        body: dict[str, Any] = {"name": name}
+        body: dict[str, Any] = {"name": name, "mode": mode, "concurrency": concurrency}
         if pid:
             body["pid"] = pid
         if description:
             body["description"] = description
-        if path:
-            body["path"] = path
+        if tags is not None:
+            body["tags"] = tags
+        if inputs_schema is not None:
+            body["inputs_schema"] = inputs_schema
         return self._request("POST", "/", json=body)
 
     def update_roadmap(self, roadmap_id: str, **fields) -> dict:
+        """Update a roadmap. Available fields: name, description, status, mode, concurrency, tags, inputs_schema."""
         body = {k: v for k, v in fields.items() if v is not None}
         return self._request("PATCH", f"/{roadmap_id}", json=body)
 
@@ -107,11 +120,13 @@ class RoadmapClient:
 
     # ── Roadmap state & control ───────────────────────────────────
 
-    def get_state(self, roadmap_id: str) -> dict:
-        return self._request("GET", f"/{roadmap_id}/state")
+    def get_state(self, roadmap_id: str, expand_subs: bool = False) -> dict:
+        params = {"expand_subs": "true"} if expand_subs else {}
+        return self._request("GET", f"/{roadmap_id}/state", params=params)
 
-    def get_graph(self, roadmap_id: str) -> dict:
-        return self._request("GET", f"/{roadmap_id}/graph")
+    def get_graph(self, roadmap_id: str, expand_subs: bool = False) -> dict:
+        params = {"expand_subs": "true"} if expand_subs else {}
+        return self._request("GET", f"/{roadmap_id}/graph", params=params)
 
     def start_roadmap(self, roadmap_id: str) -> dict:
         return self._request("POST", f"/{roadmap_id}/start")
@@ -122,6 +137,23 @@ class RoadmapClient:
 
     def pause_roadmap(self, roadmap_id: str) -> dict:
         return self._request("POST", f"/{roadmap_id}/pause")
+
+    def execute_roadmap(self, roadmap_id: str, inputs: dict | None = None) -> dict:
+        """Create and start a new execution (supports callable roadmap inputs)."""
+        body = {}
+        if inputs:
+            body["inputs"] = inputs
+        return self._request("POST", f"/{roadmap_id}/execute", json=body)
+
+    def get_execution_state(self, roadmap_id: str, execution_id: str, depth: int = 1) -> dict:
+        """Get execution state with task progress."""
+        params = {"depth": depth}
+        return self._request("GET", f"/{roadmap_id}/executions/{execution_id}/state", params=params)
+
+    def stop_execution(self, roadmap_id: str, execution_id: str, hard: bool = False) -> dict:
+        """Stop a specific execution."""
+        params = {"hard": "true"} if hard else {}
+        return self._request("POST", f"/{roadmap_id}/executions/{execution_id}/stop", params=params)
 
     def get_executions(self, roadmap_id: str) -> list:
         return self._request("GET", f"/{roadmap_id}/executions")
@@ -155,23 +187,32 @@ class RoadmapClient:
 
     # ── Task lifecycle ────────────────────────────────────────────
 
-    def start_task(self, roadmap_id: str, task_id: str) -> dict:
-        return self._request("POST", f"/{roadmap_id}/tasks/{task_id}/start")
+    def _task_action(self, roadmap_id: str, task_id: str, action: str,
+                     execution_id: Optional[str] = None) -> dict:
+        """Execute a task lifecycle action, optionally scoped to an execution."""
+        body = {}
+        if execution_id:
+            body["execution_id"] = execution_id
+        return self._request("POST", f"/{roadmap_id}/tasks/{task_id}/{action}",
+                             json=body if body else None)
 
-    def cancel_task(self, roadmap_id: str, task_id: str) -> dict:
-        return self._request("POST", f"/{roadmap_id}/tasks/{task_id}/cancel")
+    def start_task(self, roadmap_id: str, task_id: str, execution_id: Optional[str] = None) -> dict:
+        return self._task_action(roadmap_id, task_id, "start", execution_id)
 
-    def retry_task(self, roadmap_id: str, task_id: str) -> dict:
-        return self._request("POST", f"/{roadmap_id}/tasks/{task_id}/retry")
+    def cancel_task(self, roadmap_id: str, task_id: str, execution_id: Optional[str] = None) -> dict:
+        return self._task_action(roadmap_id, task_id, "cancel", execution_id)
 
-    def check_task(self, roadmap_id: str, task_id: str) -> dict:
-        return self._request("POST", f"/{roadmap_id}/tasks/{task_id}/check")
+    def retry_task(self, roadmap_id: str, task_id: str, execution_id: Optional[str] = None) -> dict:
+        return self._task_action(roadmap_id, task_id, "retry", execution_id)
 
-    def uncheck_task(self, roadmap_id: str, task_id: str) -> dict:
-        return self._request("POST", f"/{roadmap_id}/tasks/{task_id}/uncheck")
+    def check_task(self, roadmap_id: str, task_id: str, execution_id: Optional[str] = None) -> dict:
+        return self._task_action(roadmap_id, task_id, "check", execution_id)
 
-    def reset_task(self, roadmap_id: str, task_id: str) -> dict:
-        return self._request("POST", f"/{roadmap_id}/tasks/{task_id}/reset")
+    def uncheck_task(self, roadmap_id: str, task_id: str, execution_id: Optional[str] = None) -> dict:
+        return self._task_action(roadmap_id, task_id, "uncheck", execution_id)
+
+    def reset_task(self, roadmap_id: str, task_id: str, execution_id: Optional[str] = None) -> dict:
+        return self._task_action(roadmap_id, task_id, "reset", execution_id)
 
     def get_task_state(self, roadmap_id: str, task_id: str) -> dict:
         return self._request("GET", f"/{roadmap_id}/tasks/{task_id}/state")
@@ -226,3 +267,26 @@ class RoadmapClient:
         if source:
             body["source"] = source
         return self._request("POST", f"/{roadmap_id}/blocks", json=body)
+
+    def update_block(
+        self,
+        roadmap_id: str,
+        block_id: str,
+        content: Optional[str] = None,
+        status: Optional[str] = None,
+        source: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> dict:
+        body: dict[str, Any] = {}
+        if content is not None:
+            body["content"] = content
+        if status is not None:
+            body["status"] = status
+        if source is not None:
+            body["source"] = source
+        if task_id is not None:
+            body["task_id"] = task_id
+        return self._request("PATCH", f"/{roadmap_id}/blocks/{block_id}", json=body)
+
+    def delete_block(self, roadmap_id: str, block_id: str) -> None:
+        self._request("DELETE", f"/{roadmap_id}/blocks/{block_id}")

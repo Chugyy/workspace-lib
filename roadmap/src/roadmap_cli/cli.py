@@ -14,9 +14,12 @@ task_app = typer.Typer(help="Task operations within a roadmap.", no_args_is_help
 dep_app = typer.Typer(help="Dependency operations within a roadmap.", no_args_is_help=True)
 block_app = typer.Typer(help="Block (notes/annotations) operations.", no_args_is_help=True)
 
+exec_app = typer.Typer(help="Execution operations within a roadmap.", no_args_is_help=True)
+
 app.add_typer(task_app, name="task")
 app.add_typer(dep_app, name="dep")
 app.add_typer(block_app, name="block")
+app.add_typer(exec_app, name="exec")
 
 _profile_name: Optional[str] = None
 _json_output: bool = False
@@ -69,21 +72,25 @@ def _status_icon(status: str) -> str:
 @app.command("list")
 def list_roadmaps(
     pid: Optional[str] = typer.Option(None, "--pid", help="Filter by PID"),
+    tag: Optional[str] = typer.Option(None, "--tag", help="Filter by tag"),
+    status: Optional[str] = typer.Option(None, "--status", help="Filter by status"),
+    mode: Optional[str] = typer.Option(None, "--mode", help="Filter by mode (autonomous, callable)"),
 ):
     """List all roadmaps."""
-    data = _client().list_roadmaps(pid=pid)
+    data = _client().list_roadmaps(pid=pid, tag=tag, status=status, mode=mode)
 
     def fmt(items):
         if not items:
             typer.echo("No roadmaps found.")
             return
-        typer.echo(f"{'ID':10s} {'STATUS':10s} {'PID':15s} NAME")
-        typer.echo("-" * 60)
+        typer.echo(f"{'ID':10s} {'STATUS':10s} {'MODE':12s} {'PID':15s} NAME")
+        typer.echo("-" * 70)
         for r in items:
             sid = _short_id(r["id"])
-            status = r.get("status", "?")
+            st = r.get("status", "?")
+            md = r.get("mode", "?")
             pid_val = r.get("pid") or "-"
-            typer.echo(f"{sid:10s} {status:10s} {pid_val:15s} {r['name']}")
+            typer.echo(f"{sid:10s} {st:10s} {md:12s} {pid_val:15s} {r['name']}")
 
     _out(data, fmt)
 
@@ -104,8 +111,14 @@ def show_roadmap(
             typer.echo(f"PID:     {r['pid']}")
         if r.get("description"):
             typer.echo(f"Desc:    {r['description']}")
-        if r.get("path"):
-            typer.echo(f"Path:    {r['path']}")
+        if r.get("mode"):
+            typer.echo(f"Mode:    {r['mode']}")
+        if r.get("concurrency"):
+            typer.echo(f"Concur:  {r['concurrency']}")
+        if r.get("tags"):
+            typer.echo(f"Tags:    {', '.join(r['tags'])}")
+        if r.get("inputs_schema"):
+            typer.echo(f"Inputs:  {json.dumps(r['inputs_schema'])}")
         typer.echo(f"Created: {r.get('created_at', '?')}")
         typer.echo(f"Updated: {r.get('updated_at', '?')}")
 
@@ -117,10 +130,17 @@ def create_roadmap(
     name: str = typer.Argument(..., help="Roadmap name"),
     pid: Optional[str] = typer.Option(None, "--pid", help="Associate with a PID"),
     description: Optional[str] = typer.Option(None, "--desc", "-d", help="Description"),
-    path: Optional[str] = typer.Option(None, "--path", help="File path reference"),
+    mode: str = typer.Option("autonomous", "--mode", help="Mode: autonomous or callable"),
+    concurrency: str = typer.Option("parallel", "--concurrency", help="Concurrency: parallel or single"),
+    tag: Optional[list[str]] = typer.Option(None, "--tag", help="Tags (repeatable)"),
+    inputs_schema: Optional[str] = typer.Option(None, "--inputs-schema", help="Inputs schema JSON for callable mode"),
 ):
     """Create a new roadmap."""
-    data = _client().create_roadmap(name, pid=pid, description=description, path=path)
+    schema = json.loads(inputs_schema) if inputs_schema else None
+    data = _client().create_roadmap(
+        name, pid=pid, description=description,
+        mode=mode, concurrency=concurrency, tags=tag, inputs_schema=schema,
+    )
 
     def fmt(r):
         typer.echo(f"Created roadmap: {r['name']} ({_short_id(r['id'])})")
@@ -134,11 +154,29 @@ def update_roadmap(
     name: Optional[str] = typer.Option(None, "--name", "-n", help="New name"),
     description: Optional[str] = typer.Option(None, "--desc", "-d", help="New description"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="New status (active, stopped, paused)"),
-    pid: Optional[str] = typer.Option(None, "--pid", help="Associate with PID"),
+    mode: Optional[str] = typer.Option(None, "--mode", help="Mode: autonomous or callable"),
+    concurrency: Optional[str] = typer.Option(None, "--concurrency", help="Concurrency: parallel or single"),
+    tag: Optional[list[str]] = typer.Option(None, "--tag", help="Tags (replaces existing)"),
+    inputs_schema: Optional[str] = typer.Option(None, "--inputs-schema", help="Inputs schema JSON"),
 ):
     """Update a roadmap."""
     rid = _resolve_roadmap_id(roadmap_id)
-    data = _client().update_roadmap(rid, name=name, description=description, status=status, pid=pid)
+    fields = {}
+    if name is not None:
+        fields["name"] = name
+    if description is not None:
+        fields["description"] = description
+    if status is not None:
+        fields["status"] = status
+    if mode is not None:
+        fields["mode"] = mode
+    if concurrency is not None:
+        fields["concurrency"] = concurrency
+    if tag is not None:
+        fields["tags"] = tag
+    if inputs_schema is not None:
+        fields["inputs_schema"] = json.loads(inputs_schema)
+    data = _client().update_roadmap(rid, **fields)
 
     def fmt(r):
         typer.echo(f"Updated roadmap: {r['name']} ({_short_id(r['id'])})")
@@ -178,10 +216,11 @@ def duplicate_roadmap(
 @app.command("state")
 def roadmap_state(
     roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
+    expand_subs: bool = typer.Option(False, "--expand-subs", help="Expand sub-roadmap tasks"),
 ):
     """Show roadmap with enriched task states (runtime status from aggregator)."""
     rid = _resolve_roadmap_id(roadmap_id)
-    data = _client().get_state(rid)
+    data = _client().get_state(rid, expand_subs=expand_subs)
 
     def fmt(state):
         r = state.get("roadmap", state)
@@ -207,10 +246,11 @@ def roadmap_state(
 @app.command("graph")
 def roadmap_graph(
     roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
+    expand_subs: bool = typer.Option(False, "--expand-subs", help="Expand sub-roadmap tasks"),
 ):
     """Show topological dependency graph with levels."""
     rid = _resolve_roadmap_id(roadmap_id)
-    data = _client().get_graph(rid)
+    data = _client().get_graph(rid, expand_subs=expand_subs)
 
     def fmt(g):
         levels = g.get("levels", [])
@@ -261,6 +301,95 @@ def pause_roadmap(
     rid = _resolve_roadmap_id(roadmap_id)
     data = _client().pause_roadmap(rid)
     typer.echo(f"Paused roadmap {_short_id(rid)}")
+    if _json_output:
+        typer.echo(json.dumps(data, indent=2))
+
+
+@app.command("execute")
+def execute_roadmap(
+    roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
+    inputs: Optional[str] = typer.Option(None, "--inputs", "-i", help="JSON inputs for callable roadmaps"),
+):
+    """Create and start a new execution (supports callable roadmap inputs)."""
+    rid = _resolve_roadmap_id(roadmap_id)
+    parsed_inputs = json.loads(inputs) if inputs else None
+    data = _client().execute_roadmap(rid, inputs=parsed_inputs)
+
+    def fmt(r):
+        exec_data = r.get("execution", {})
+        typer.echo(f"Execution started: {_short_id(exec_data.get('id', ''))}")
+        started = r.get("started_tasks", [])
+        if started:
+            typer.echo(f"  Launched {len(started)} task(s)")
+
+    _out(data, fmt)
+
+
+# ══════════════════════════════════════════════════════════════════
+# EXEC sub-commands
+# ══════════════════════════════════════════════════════════════════
+
+@exec_app.command("list")
+def list_executions(
+    roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
+):
+    """List all executions for a roadmap."""
+    rid = _resolve_roadmap_id(roadmap_id)
+    data = _client().get_executions(rid)
+
+    def fmt(execs):
+        if not execs:
+            typer.echo("No executions.")
+            return
+        typer.echo(f"{'ID':10s} {'STATUS':12s} {'CREATED':20s} PARENT")
+        typer.echo("-" * 60)
+        for e in execs:
+            sid = _short_id(e["id"])
+            status = e.get("status", "?")
+            created = (e.get("created_at") or "?")[:19]
+            parent = _short_id(e.get("parent_task_id") or "") or "-"
+            typer.echo(f"{sid:10s} {status:12s} {created:20s} {parent}")
+
+    _out(data, fmt)
+
+
+@exec_app.command("state")
+def execution_state(
+    roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
+    execution_id: str = typer.Argument(..., help="Execution ID"),
+    depth: int = typer.Option(1, "--depth", help="Sub-roadmap traversal depth (0-5)"),
+):
+    """Show execution state with task progress."""
+    rid = _resolve_roadmap_id(roadmap_id)
+    data = _client().get_execution_state(rid, execution_id, depth=depth)
+
+    def fmt(s):
+        progress = s.get("progress", {})
+        typer.echo(f"Execution: {_short_id(execution_id)}")
+        typer.echo(f"Progress:  {progress.get('completed', 0)}/{progress.get('total', 0)} ({progress.get('percent', 0)}%)")
+        typer.echo("")
+        tasks = s.get("tasks", [])
+        if tasks:
+            typer.echo(f"  {'ID':10s} {'STATE':12s} NAME")
+            typer.echo(f"  {'-' * 40}")
+            for t in tasks:
+                icon = _status_icon(t.get("state", "pending"))
+                sid = _short_id(t["task_id"])
+                typer.echo(f"  [{icon}] {sid:10s} {t.get('state', 'pending'):12s} {t['name']}")
+
+    _out(data, fmt)
+
+
+@exec_app.command("stop")
+def stop_execution(
+    roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
+    execution_id: str = typer.Argument(..., help="Execution ID"),
+    hard: bool = typer.Option(False, "--hard", help="Cancel running tasks"),
+):
+    """Stop a specific execution."""
+    rid = _resolve_roadmap_id(roadmap_id)
+    data = _client().stop_execution(rid, execution_id, hard=hard)
+    typer.echo(f"Stopped execution {_short_id(execution_id)}" + (" (hard)" if hard else ""))
     if _json_output:
         typer.echo(json.dumps(data, indent=2))
 
@@ -316,6 +445,10 @@ def show_task(
             typer.echo(f"Trigger:     {t['trigger_event']}")
         if t.get("cron_expression"):
             typer.echo(f"Cron:        {t['cron_expression']}")
+        if t.get("sub_roadmap_id"):
+            typer.echo(f"Sub-RM:      {t['sub_roadmap_id']}")
+        if t.get("run_config"):
+            typer.echo(f"Run config:  {json.dumps(t['run_config']) if isinstance(t['run_config'], dict) else t['run_config']}")
         typer.echo(f"Position:    {t.get('position', 0)}")
 
     _out(data, fmt)
@@ -402,11 +535,12 @@ def delete_task(
 def check_task(
     roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
     task_id: str = typer.Argument(..., help="Task ID"),
+    execution_id: Optional[str] = typer.Option(None, "--execution-id", "-e", help="Scope to execution"),
 ):
     """Mark a task as manually completed."""
     rid = _resolve_roadmap_id(roadmap_id)
     tid = _resolve_task_id(rid, task_id)
-    _client().check_task(rid, tid)
+    _client().check_task(rid, tid, execution_id=execution_id)
     typer.echo(f"Checked task {_short_id(tid)}")
 
 
@@ -414,11 +548,12 @@ def check_task(
 def uncheck_task(
     roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
     task_id: str = typer.Argument(..., help="Task ID"),
+    execution_id: Optional[str] = typer.Option(None, "--execution-id", "-e", help="Scope to execution"),
 ):
     """Remove manual completion mark from a task."""
     rid = _resolve_roadmap_id(roadmap_id)
     tid = _resolve_task_id(rid, task_id)
-    _client().uncheck_task(rid, tid)
+    _client().uncheck_task(rid, tid, execution_id=execution_id)
     typer.echo(f"Unchecked task {_short_id(tid)}")
 
 
@@ -426,11 +561,12 @@ def uncheck_task(
 def start_task(
     roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
     task_id: str = typer.Argument(..., help="Task ID"),
+    execution_id: Optional[str] = typer.Option(None, "--execution-id", "-e", help="Scope to execution"),
 ):
     """Start task execution."""
     rid = _resolve_roadmap_id(roadmap_id)
     tid = _resolve_task_id(rid, task_id)
-    _client().start_task(rid, tid)
+    _client().start_task(rid, tid, execution_id=execution_id)
     typer.echo(f"Started task {_short_id(tid)}")
 
 
@@ -438,11 +574,12 @@ def start_task(
 def cancel_task(
     roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
     task_id: str = typer.Argument(..., help="Task ID"),
+    execution_id: Optional[str] = typer.Option(None, "--execution-id", "-e", help="Scope to execution"),
 ):
     """Cancel a running task."""
     rid = _resolve_roadmap_id(roadmap_id)
     tid = _resolve_task_id(rid, task_id)
-    _client().cancel_task(rid, tid)
+    _client().cancel_task(rid, tid, execution_id=execution_id)
     typer.echo(f"Cancelled task {_short_id(tid)}")
 
 
@@ -450,11 +587,12 @@ def cancel_task(
 def retry_task(
     roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
     task_id: str = typer.Argument(..., help="Task ID"),
+    execution_id: Optional[str] = typer.Option(None, "--execution-id", "-e", help="Scope to execution"),
 ):
     """Retry a failed task."""
     rid = _resolve_roadmap_id(roadmap_id)
     tid = _resolve_task_id(rid, task_id)
-    _client().retry_task(rid, tid)
+    _client().retry_task(rid, tid, execution_id=execution_id)
     typer.echo(f"Retried task {_short_id(tid)}")
 
 
@@ -462,11 +600,12 @@ def retry_task(
 def reset_task(
     roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
     task_id: str = typer.Argument(..., help="Task ID"),
+    execution_id: Optional[str] = typer.Option(None, "--execution-id", "-e", help="Scope to execution"),
 ):
     """Reset a task to pending state."""
     rid = _resolve_roadmap_id(roadmap_id)
     tid = _resolve_task_id(rid, task_id)
-    _client().reset_task(rid, tid)
+    _client().reset_task(rid, tid, execution_id=execution_id)
     typer.echo(f"Reset task {_short_id(tid)}")
 
 
@@ -571,6 +710,42 @@ def add_block(
         typer.echo(f"Added block {_short_id(b['id'])}")
 
     _out(data, fmt)
+
+
+@block_app.command("update")
+def update_block(
+    roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
+    block_id: str = typer.Argument(..., help="Block ID"),
+    content: Optional[str] = typer.Option(None, "--content", "-c", help="New content"),
+    status: Optional[str] = typer.Option(None, "--status", "-s", help="New status (active/archived)"),
+    source: Optional[str] = typer.Option(None, "--source", help="New source"),
+    task_id: Optional[str] = typer.Option(None, "--task", "-t", help="Re-associate with task"),
+):
+    """Update a block."""
+    rid = _resolve_roadmap_id(roadmap_id)
+    data = _client().update_block(rid, block_id, content=content, status=status,
+                                  source=source, task_id=task_id)
+
+    def fmt(b):
+        typer.echo(f"Updated block {_short_id(b.get('id', block_id))}")
+
+    _out(data, fmt)
+
+
+@block_app.command("delete")
+def delete_block(
+    roadmap_id: str = typer.Argument(..., help="Roadmap ID"),
+    block_id: str = typer.Argument(..., help="Block ID"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+):
+    """Delete a block."""
+    rid = _resolve_roadmap_id(roadmap_id)
+    if not force:
+        confirm = typer.confirm(f"Delete block {_short_id(block_id)}?")
+        if not confirm:
+            raise typer.Abort()
+    _client().delete_block(rid, block_id)
+    typer.echo(f"Deleted block {_short_id(block_id)}")
 
 
 # ══════════════════════════════════════════════════════════════════
