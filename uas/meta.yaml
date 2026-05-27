@@ -1,0 +1,12 @@
+id: uas
+type: tool
+description: >
+  Manage the Universal Agent Service (UAS) from the command line:
+  MCP servers, tools, sessions, configuration.
+requires:
+  env:
+    - UAS_URL: "URL of the UAS service (e.g., http://127.0.0.1:3001)"
+    - UAS_AUTH_TOKEN: "Bearer token for UAS auth (optional, leave empty if none)"
+  system:
+    - python3
+  setup: "./setup.sh"
