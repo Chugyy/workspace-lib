@@ -47,6 +47,8 @@ def ask(
     cwd: Optional[str] = typer.Option(None, "--cwd", help="Working directory (runtime mode or tool execution)"),
     agent_dir: Optional[str] = typer.Option(None, "--agent-dir", help="Path to agent directory (skips registry lookup)"),
     prompt_file: Optional[List[str]] = typer.Option(None, "--prompt-file", "-f", help="File(s) to use as system prompt"),
+    sdk: Optional[str] = typer.Option(None, "--sdk", help="SDK for model routing (e.g. opencode-sdk, claude-sdk)"),
+    provider: Optional[str] = typer.Option(None, "--provider", help="Provider for model routing (e.g. anthropic, openai)"),
 ):
     """One-shot query — no session persistence.
 
@@ -73,6 +75,8 @@ def ask(
             cwd=cwd,
             agent_directory=agent_dir,
             system_prompt_paths=system_paths,
+            sdk=sdk,
+            provider=provider,
         )
     elif prompt is not None:
         # Two positional args: <agent> <prompt> → PID mode (rétrocompat)
@@ -89,6 +93,8 @@ def ask(
             cwd=cwd,
             pid=agent_name,
             system_prompt_paths=system_paths,
+            sdk=sdk,
+            provider=provider,
         )
     elif cwd:
         # Runtime mode: --cwd given, single positional is the prompt
@@ -102,6 +108,8 @@ def ask(
             cwd=cwd,
             agent_directory=agent_dir,
             system_prompt_paths=system_paths,
+            sdk=sdk,
+            provider=provider,
         )
     else:
         typer.echo(
@@ -127,6 +135,8 @@ def chat(
     cwd: Optional[str] = typer.Option(None, "--cwd", help="Working directory for tool execution"),
     agent_dir: Optional[str] = typer.Option(None, "--agent-dir", help="Path to agent directory (alternative to <agent> name)"),
     prompt_file: Optional[List[str]] = typer.Option(None, "--prompt-file", "-f", help="File(s) to use as system prompt"),
+    sdk: Optional[str] = typer.Option(None, "--sdk", help="SDK for model routing (e.g. opencode-sdk, claude-sdk)"),
+    provider: Optional[str] = typer.Option(None, "--provider", help="Provider for model routing (e.g. anthropic, openai)"),
 ):
     """Start a persistent conversation session."""
     system_paths = [str(Path(p).resolve()) for p in prompt_file] if prompt_file else None
@@ -152,6 +162,8 @@ def chat(
         agent_directory=agent_dir,
         pid=agent if not agent_dir else None,
         system_prompt_paths=system_paths,
+        sdk=sdk,
+        provider=provider,
     )
 
     if result["session_id"]:

@@ -90,6 +90,27 @@ def _expand_model(model: str) -> str:
     return _ALIASES.get(model, model)
 
 
+def _build_route_id(
+    model: str,
+    sdk: Optional[str] = None,
+    provider: Optional[str] = None,
+) -> str:
+    """Build a model route ID for UAS routing.
+
+    If sdk and provider are given, constructs `sdk:provider:model_id`.
+    Otherwise returns the plain (alias-expanded) model ID and lets the
+    backend infer the routing via its default resolution logic.
+    """
+    expanded = _expand_model(model)
+    if sdk and provider:
+        return f"{sdk}:{provider}:{expanded}"
+    if sdk:
+        # sdk without provider — not a full route, use plain model
+        # and let the backend resolve provider from UAS
+        return expanded
+    return expanded
+
+
 def _collect_text(events: list[dict]) -> str:
     """Extract concatenated assistant text from a list of SSE events."""
     parts = []
@@ -114,12 +135,15 @@ def run(
     agent_directory: Optional[str] = None,
     pid: Optional[str] = None,
     system_prompt_paths: Optional[list] = None,
+    # Routing overrides (construct route ID: sdk:provider:model_id)
+    sdk: Optional[str] = None,
+    provider: Optional[str] = None,
 ) -> dict:
     """Invoke agent via AI Manager API and return assembled result.
 
     Returns dict with keys: result, session_id, cost_usd, num_turns, is_error
     """
-    full_model = _expand_model(model)
+    full_model = _build_route_id(model, sdk=sdk, provider=provider)
 
     try:
         # --- Resume: reuse existing backend conversation ---
