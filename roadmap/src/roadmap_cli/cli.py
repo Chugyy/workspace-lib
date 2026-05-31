@@ -51,8 +51,19 @@ def _out(data, fmt_func=None):
 
 
 def _short_id(full_id: str) -> str:
-    """Show first 8 chars of UUID for readability."""
-    return full_id[:8] if full_id and len(full_id) > 8 else (full_id or "")
+    """Show ID for readability: full for short kebab-case, truncated for UUIDs/long IDs."""
+    if not full_id:
+        return ""
+    # Short IDs (kebab-case): show full
+    if len(full_id) <= 24:
+        return full_id
+    # UUID-like (36 chars with dashes at fixed positions): show first 8
+    if len(full_id) == 36 and full_id[8] == "-" and full_id[13] == "-":
+        return full_id[:8]
+    # Long kebab-case: truncate with ellipsis
+    if len(full_id) > 24:
+        return full_id[:21] + "..."
+    return full_id
 
 
 def _status_icon(status: str) -> str:
@@ -83,14 +94,14 @@ def list_roadmaps(
         if not items:
             typer.echo("No roadmaps found.")
             return
-        typer.echo(f"{'ID':10s} {'STATUS':10s} {'MODE':12s} {'PID':15s} NAME")
-        typer.echo("-" * 70)
+        typer.echo(f"{'ID':28s} {'STATUS':10s} {'MODE':12s} {'PID':20s} NAME")
+        typer.echo("-" * 95)
         for r in items:
             sid = _short_id(r["id"])
             st = r.get("status", "?")
             md = r.get("mode", "?")
             pid_val = r.get("pid") or "-"
-            typer.echo(f"{sid:10s} {st:10s} {md:12s} {pid_val:15s} {r['name']}")
+            typer.echo(f"{sid:28s} {st:10s} {md:12s} {pid_val:20s} {r['name']}")
 
     _out(data, fmt)
 
@@ -230,15 +241,15 @@ def roadmap_state(
         if not tasks:
             typer.echo("  No tasks.")
             return
-        typer.echo(f"  {'':2s} {'ID':10s} {'STATUS':12s} {'POS':4s} NAME")
-        typer.echo(f"  {'-' * 50}")
+        typer.echo(f"  {'':2s} {'ID':28s} {'STATUS':12s} {'POS':4s} NAME")
+        typer.echo(f"  {'-' * 70}")
         for t in tasks:
             icon = _status_icon(t.get("status", t.get("state", "pending")))
             sid = _short_id(t["id"])
             status = t.get("status", t.get("state", "pending"))
             pos = str(t.get("position", 0))
             indent = "  " if t.get("parent_id") else ""
-            typer.echo(f"  [{icon}] {sid:10s} {status:12s} {pos:4s} {indent}{t['name']}")
+            typer.echo(f"  [{icon}] {sid:28s} {status:12s} {pos:4s} {indent}{t['name']}")
 
     _out(data, fmt)
 
@@ -410,13 +421,13 @@ def list_tasks(
         if not tasks:
             typer.echo("No tasks.")
             return
-        typer.echo(f"{'ID':10s} {'POS':4s} {'PARENT':10s} NAME")
-        typer.echo("-" * 50)
+        typer.echo(f"{'ID':28s} {'POS':4s} {'PARENT':20s} NAME")
+        typer.echo("-" * 80)
         for t in tasks:
             sid = _short_id(t["id"])
             pos = str(t.get("position", 0))
             parent = _short_id(t.get("parent_id") or "") or "-"
-            typer.echo(f"{sid:10s} {pos:4s} {parent:10s} {t['name']}")
+            typer.echo(f"{sid:28s} {pos:4s} {parent:20s} {t['name']}")
 
     _out(data, fmt)
 
@@ -625,13 +636,12 @@ def list_deps(
         if not deps:
             typer.echo("No dependencies.")
             return
-        typer.echo(f"{'DEP_ID':10s} {'TASK':10s} {'DEPENDS_ON':10s} TYPE")
-        typer.echo("-" * 50)
+        typer.echo(f"{'TASK':28s} {'DEPENDS_ON':28s} TYPE")
+        typer.echo("-" * 80)
         for d in deps:
             typer.echo(
-                f"{_short_id(d['id']):10s} "
-                f"{_short_id(d['task_id']):10s} "
-                f"{_short_id(d['depends_on']):10s} "
+                f"{_short_id(d['task_id']):28s} "
+                f"{_short_id(d['depends_on']):28s} "
                 f"{d.get('dep_type', 'finish_to_start')}"
             )
 
@@ -753,17 +763,19 @@ def delete_block(
 # ══════════════════════════════════════════════════════════════════
 
 def _resolve_roadmap_id(prefix: str) -> str:
-    """Resolve a roadmap ID from prefix or full UUID."""
-    if len(prefix) >= 32:
-        return prefix
-    # Search by prefix
+    """Resolve a roadmap ID from prefix, full ID, or name substring."""
     try:
         roadmaps = _client().list_roadmaps()
+        # Exact match first
+        exact = [r for r in roadmaps if r["id"] == prefix]
+        if len(exact) == 1:
+            return exact[0]["id"]
+        # Prefix match
         matches = [r for r in roadmaps if r["id"].startswith(prefix)]
         if len(matches) == 1:
             return matches[0]["id"]
         if len(matches) == 0:
-            # Try matching by name (case-insensitive)
+            # Name search (case-insensitive substring)
             matches = [r for r in roadmaps if prefix.lower() in r["name"].lower()]
             if len(matches) == 1:
                 return matches[0]["id"]
@@ -771,23 +783,26 @@ def _resolve_roadmap_id(prefix: str) -> str:
             raise typer.Exit(1)
         typer.echo(f"Ambiguous prefix '{prefix}', matches {len(matches)} roadmaps:", err=True)
         for r in matches:
-            typer.echo(f"  {_short_id(r['id'])}  {r['name']}", err=True)
+            typer.echo(f"  {r['id']}  {r['name']}", err=True)
         raise typer.Exit(1)
     except httpx.HTTPStatusError:
         return prefix
 
 
 def _resolve_task_id(roadmap_id: str, prefix: str) -> str:
-    """Resolve a task ID from prefix or full UUID."""
-    if len(prefix) >= 32:
-        return prefix
+    """Resolve a task ID from prefix, full ID, or name substring."""
     try:
         tasks = _client().list_tasks(roadmap_id)
+        # Exact match first
+        exact = [t for t in tasks if t["id"] == prefix]
+        if len(exact) == 1:
+            return exact[0]["id"]
+        # Prefix match
         matches = [t for t in tasks if t["id"].startswith(prefix)]
         if len(matches) == 1:
             return matches[0]["id"]
         if len(matches) == 0:
-            # Try matching by name
+            # Name search (case-insensitive substring)
             matches = [t for t in tasks if prefix.lower() in t["name"].lower()]
             if len(matches) == 1:
                 return matches[0]["id"]
@@ -795,7 +810,7 @@ def _resolve_task_id(roadmap_id: str, prefix: str) -> str:
             raise typer.Exit(1)
         typer.echo(f"Ambiguous prefix '{prefix}', matches {len(matches)} tasks:", err=True)
         for t in matches:
-            typer.echo(f"  {_short_id(t['id'])}  {t['name']}", err=True)
+            typer.echo(f"  {t['id']}  {t['name']}", err=True)
         raise typer.Exit(1)
     except httpx.HTTPStatusError:
         return prefix
